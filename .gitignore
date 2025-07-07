@@ -1,0 +1,62 @@
+# =====================
+# Python
+# =====================
+__pycache__/
+*.py[cod]
+*.egg-info/
+*.log
+*.sqlite3
+*.db
+
+# Virtual environments
+.env/
+.venv/
+venv/
+ENV/
+env/
+
+# Jupyter Notebook Checkpoints (if used)
+.ipynb_checkpoints/
+
+# =====================
+# Streamlit Cache & Assets
+# =====================
+.streamlit/
+*.tfrecord
+assets/
+resume_uploads/
+*.pdf
+*.docx
+*.txt
+
+# =====================
+# Config and Secrets
+# =====================
+.env
+secrets.json
+config.yml
+openai_key.txt
+groq_key.txt
+
+# =====================
+# System
+# =====================
+.DS_Store
+Thumbs.db
+
+# =====================
+# IDEs
+# =====================
+.vscode/
+.idea/
+*.swp
+*.bak
+*.sublime-workspace
+
+# =====================
+# Outputs
+# =====================
+*.csv
+*.xlsx
+*.json
+exported_reports/
