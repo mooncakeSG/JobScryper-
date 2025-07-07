@@ -28,6 +28,8 @@ resume_uploads/
 *.pdf
 *.docx
 *.txt
+!requirements.txt
+!requirements-dev.txt
 
 # =====================
 # Config and Secrets
