@@ -6,6 +6,15 @@ from datetime import datetime
 import time
 from pathlib import Path
 import requests
+import json
+
+# Import our new error handling and utility modules
+from utils import (
+    get_logger, ErrorContext, handle_errors, validate_job_search,
+    APIError, RateLimitError, NetworkError, ValidationError,
+    retry_on_failure, get_retry_handler, display_error_to_user,
+    ErrorResponse, get_performance_logger, sanitize_input
+)
 
 # Load environment variables from .env file
 try:
@@ -120,6 +129,10 @@ for key in required_keys:
     if key not in st.session_state.jobs_data:
         st.session_state.jobs_data[key] = []
 
+# Initialize logger for this module
+logger = get_logger(__name__)
+performance_logger = get_performance_logger()
+
 def save_uploaded_resume(uploaded_file):
     """Save uploaded resume file to assets folder and parse it"""
     if uploaded_file is not None:
@@ -178,48 +191,150 @@ def query_groq(prompt):
     except Exception as e:
         return f"Error querying Groq: {str(e)}"
 
+@handle_errors(
+    operation_name="Job Search",
+    show_user_error=True,
+    show_technical_details=True,
+    default_return_value=[],
+    log_errors=True
+)
 def search_jobs(job_title, location, job_type, keywords):
-    """Search for jobs using multiple scrapers"""
-    all_jobs = []
+    """Search for jobs using multiple scrapers with comprehensive error handling"""
     
-    # JobSpy Search
+    # Start performance tracking
+    search_start_time = time.time()
+    
     try:
-        with st.spinner("Searching JobSpy (LinkedIn, Indeed, ZipRecruiter, Glassdoor)..."):
-            jobspy_wrapper = JobSpyWrapper()
-            jobspy_jobs = jobspy_wrapper.search_jobs(
-                job_title=job_title,
-                location=location,
-                sites=["indeed", "linkedin", "zip_recruiter", "glassdoor"],
-                max_results=20
-            )
-            if jobspy_jobs:
-                st.session_state.jobs_data['jobspy'] = jobspy_jobs
-                all_jobs.extend(jobspy_jobs)
-                st.success(f"✅ JobSpy: Found {len(jobspy_jobs)} jobs (from LinkedIn and other sources)")
-            else:
-                st.info("ℹ️ JobSpy: No jobs found - some sites may be blocking requests")
+        # Validate input parameters
+        search_params = {
+            'job_title': job_title,
+            'location': location,
+            'job_type': job_type,
+            'keywords': keywords,
+            'max_results': 50  # Default max results
+        }
+        
+        validated_params = validate_job_search(search_params)
+        logger.info(f"Starting job search with validated parameters: {validated_params}")
+        
+        all_jobs = []
+        search_results = {}
+        
+        # JobSpy Search with error context
+        with ErrorContext("JobSpy Search", show_spinner=True, show_technical_details=False) as ctx:
+            if not ctx.error_occurred:
+                retry_handler = get_retry_handler('jobspy')
+                
+                def _jobspy_search():
+                    jobspy_wrapper = JobSpyWrapper()
+                    return jobspy_wrapper.search_jobs(
+                        job_title=validated_params['job_title'],
+                        location=validated_params['location'],
+                        sites=["indeed", "linkedin", "zip_recruiter", "glassdoor"],
+                        max_results=20
+                    )
+                
+                try:
+                    jobspy_jobs = retry_handler.retry(
+                        _jobspy_search,
+                        circuit_breaker_key="jobspy_search"
+                    )
+                    
+                    if jobspy_jobs:
+                        st.session_state.jobs_data['jobspy'] = jobspy_jobs
+                        all_jobs.extend(jobspy_jobs)
+                        search_results['jobspy'] = len(jobspy_jobs)
+                        st.success(f"✅ JobSpy: Found {len(jobspy_jobs)} jobs (from LinkedIn and other sources)")
+                        logger.info(f"JobSpy search successful: {len(jobspy_jobs)} jobs found")
+                    else:
+                        st.info("ℹ️ JobSpy: No jobs found - some sites may be blocking requests")
+                        search_results['jobspy'] = 0
+                        
+                except Exception as e:
+                    logger.warning(f"JobSpy search failed after retries: {str(e)}")
+                    search_results['jobspy'] = 0
+                    st.warning("⚠️ JobSpy: Search temporarily unavailable, continuing with other sources...")
+        
+        # Alternative Sources Search with error context
+        with ErrorContext("Alternative Sources Search", show_spinner=True, show_technical_details=False) as ctx:
+            if not ctx.error_occurred:
+                retry_handler = get_retry_handler('adzuna')  # Use Adzuna config for alternative sources
+                
+                def _alternative_search():
+                    alt_aggregator = AlternativeJobAggregator()
+                    return alt_aggregator.search_all_sources(
+                        validated_params['job_title'],
+                        validated_params['location'],
+                        max_per_source=10
+                    )
+                
+                try:
+                    alt_jobs = retry_handler.retry(
+                        _alternative_search,
+                        circuit_breaker_key="alternative_sources"
+                    )
+                    
+                    if alt_jobs:
+                        st.session_state.jobs_data['alternatives'] = alt_jobs
+                        all_jobs.extend(alt_jobs)
+                        search_results['alternatives'] = len(alt_jobs)
+                        st.success(f"✅ Alternative Sources: Found {len(alt_jobs)} jobs")
+                        logger.info(f"Alternative sources search successful: {len(alt_jobs)} jobs found")
+                    else:
+                        st.info("ℹ️ Alternative Sources: No matching jobs found")
+                        search_results['alternatives'] = 0
+                        
+                except Exception as e:
+                    logger.warning(f"Alternative sources search failed after retries: {str(e)}")
+                    search_results['alternatives'] = 0
+                    st.warning("⚠️ Alternative Sources: Search temporarily unavailable")
+        
+        # Store current jobs in session state for persistence
+        st.session_state.current_jobs = all_jobs
+        
+        # Log performance metrics
+        search_duration = time.time() - search_start_time
+        performance_logger.log_operation(
+            operation="job_search",
+            duration=search_duration,
+            success=len(all_jobs) > 0,
+            metadata={
+                "search_params": validated_params,
+                "results": search_results,
+                "total_jobs": len(all_jobs)
+            }
+        )
+        
+        # Show summary
+        total_jobs = len(all_jobs)
+        if total_jobs > 0:
+            logger.info(f"Job search completed successfully: {total_jobs} total jobs found in {search_duration:.2f}s")
+            st.balloons()  # Celebrate successful search
+        else:
+            logger.warning("Job search completed but no jobs found")
+            st.warning("🔍 No jobs found. Try different search terms or check your spelling.")
+            
+            # Provide helpful suggestions
+            with st.expander("💡 Search Tips", expanded=True):
+                st.write("**Try these suggestions:**")
+                st.write("• Use broader job titles (e.g., 'Developer' instead of 'Senior React Developer')")
+                st.write("• Check spelling of job title and location")
+                st.write("• Try different locations (Cape Town, Johannesburg, Remote)")
+                st.write("• Use fewer specific keywords")
+                st.write("• Search for related job titles")
+        
+        return all_jobs
+        
+    except ValidationError as e:
+        logger.error(f"Job search validation error: {str(e)}")
+        st.error(f"❌ Invalid search parameters: {str(e)}")
+        return []
+        
     except Exception as e:
-        st.warning(f"⚠️ JobSpy: Search encountered an issue, continuing with other sources...")
-        with st.expander("JobSpy Error Details"):
-            st.write(str(e))
-    
-    # Alternative Sources
-    try:
-        with st.spinner("Searching enhanced APIs (RemoteOK, Adzuna, Jooble, AngelCo, FlexJobs)..."):
-            alt_aggregator = AlternativeJobAggregator()
-            alt_jobs = alt_aggregator.search_all_sources(job_title, location, max_per_source=10)
-            if alt_jobs:
-                st.session_state.jobs_data['alternatives'] = alt_jobs
-                all_jobs.extend(alt_jobs)
-                st.success(f"✅ Alternative Sources: Found {len(alt_jobs)} jobs")
-            else:
-                st.info("ℹ️ Alternative Sources: No matching jobs found")
-    except Exception as e:
-        st.warning(f"⚠️ Alternative Sources: Search encountered an issue...")
-        with st.expander("Alternative Sources Error Details"):
-            st.write(str(e))
-    
-    return all_jobs
+        logger.error(f"Unexpected error in job search: {str(e)}", exc_info=True)
+        error_response = ErrorResponse(e, {"operation": "job_search", "params": search_params})
+        display_error_to_user(error_response, show_technical_details=True)
+        return []
 
 def display_job_card(job, source):
     """Display a job card with apply functionality"""
@@ -378,44 +493,93 @@ def calculate_job_data_quality(job):
     
     return round((score / total_fields) * 100)
 
+@handle_errors(
+    operation_name="Job Application Tracking",
+    show_user_error=True,
+    show_technical_details=False,
+    log_errors=True
+)
 def apply_to_job(job, source):
-    """Apply to a job and track the application"""
+    """Apply to a job and track the application with comprehensive error handling"""
+    
+    apply_start_time = time.time()
+    
     try:
+        # Import sanitize_input here to avoid circular imports
+        from utils.validation import sanitize_input
+        
         # Validate job data
-        job_title = job.get('title', 'Unknown Position')
-        company = job.get('company', 'Unknown Company')
+        if not job or not isinstance(job, dict):
+            raise ValidationError("Invalid job data provided", field="job", value=job)
+        
+        job_title = sanitize_input(job.get('title', 'Unknown Position'))
+        company = sanitize_input(job.get('company', 'Unknown Company'))
         job_url = job.get('job_url', job.get('url', ''))
+        
+        # Validate required fields
+        if job_title == 'Unknown Position':
+            raise ValidationError("Job title is required", field="job_title")
+        
+        if company == 'Unknown Company':
+            raise ValidationError("Company name is required", field="company")
         
         # Validate URL
         if not job_url or job_url in ['', 'N/A', 'Unknown']:
+            logger.warning(f"No valid job URL found for {job_title} at {company}")
             st.warning(f"⚠️ No valid job URL found for **{job_title}** at **{company}**")
             st.info("💡 This usually means the job posting doesn't have a direct application link. You may need to search for this position on the company's careers page.")
             return
         
+        # Validate URL format if provided
+        try:
+            from utils.validation import InputValidator
+            validated_url = InputValidator.validate_url(job_url, "job_url")
+            job_url = validated_url
+        except ValidationError:
+            logger.warning(f"Invalid job URL format: {job_url}")
+            st.warning(f"⚠️ Invalid job URL format for **{job_title}** at **{company}**")
+            job_url = f"https://www.google.com/search?q={job_title.replace(' ', '+')}+{company.replace(' ', '+')}"
+        
         # Check for LinkedIn Easy Apply
         is_easy_apply = job.get('easy_apply', False)
         
-        # Create application record
+        # Create application record with validation
         application = {
             'job_title': job_title,
             'company': company,
-            'location': job.get('location', 'Not specified'),
-            'source': source,
+            'location': sanitize_input(job.get('location', 'Not specified')),
+            'source': sanitize_input(source),
             'applied_date': datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
             'status': 'Tracked - Manual Application Required',
             'job_url': job_url,
             'easy_apply': is_easy_apply,
-            'salary': job.get('salary', 'Not specified'),
-            'job_type': job.get('job_type', 'Not specified'),
+            'salary': sanitize_input(job.get('salary', 'Not specified')),
+            'job_type': sanitize_input(job.get('job_type', 'Not specified')),
             'application_method': 'Manual (External URL)' if not is_easy_apply else 'LinkedIn Easy Apply Available'
         }
         
-        # Add to session state
-        st.session_state.applications.append(application)
+        # Add to session state with error handling
+        try:
+            if 'applications' not in st.session_state:
+                st.session_state.applications = []
+            
+            st.session_state.applications.append(application)
+            logger.info(f"Application tracked: {job_title} at {company}")
+            
+        except Exception as e:
+            logger.error(f"Error adding application to session state: {str(e)}")
+            raise ValidationError("Failed to save application to session", field="session_state")
         
-        # Save to file
-        save_applications_to_csv()
+        # Save to file with error context
+        with ErrorContext("Saving Application Data", show_spinner=False):
+            try:
+                save_applications_to_csv()
+                logger.info("Application saved to CSV successfully")
+            except Exception as e:
+                logger.warning(f"Failed to save application to CSV: {str(e)}")
+                st.warning("⚠️ Application tracked in session but couldn't save to file")
         
+        # Success message
         st.success(f"✅ Application tracked for **{job_title}** at **{company}**!")
         
         # Show application summary
@@ -476,21 +640,73 @@ def apply_to_job(job, source):
             st.write("• Write a compelling cover letter if required")
             st.write("• Follow up after 1-2 weeks if you don't hear back")
         
+        # Log performance
+        apply_duration = time.time() - apply_start_time
+        performance_logger.log_operation(
+            operation="job_application_tracking",
+            duration=apply_duration,
+            success=True,
+            metadata={
+                "job_title": job_title,
+                "company": company,
+                "source": source,
+                "has_url": bool(job_url)
+            }
+        )
+        
+    except ValidationError as e:
+        logger.error(f"Validation error in job application: {str(e)}")
+        st.error(f"❌ {str(e)}")
+        st.info("💡 Please check the job data and try again.")
+        
     except Exception as e:
+        logger.error(f"Unexpected error in job application tracking: {str(e)}", exc_info=True)
         st.error(f"❌ Error tracking application: {str(e)}")
         st.info("💡 You can still apply manually by visiting the company's careers page.")
 
+@handle_errors(
+    operation_name="Job Analysis",
+    show_user_error=True,
+    show_technical_details=True,
+    log_errors=True
+)
 def analyze_job(job):
-    """Analyze job compatibility with resume"""
+    """Analyze job compatibility with resume with comprehensive error handling"""
+    
+    # Validate prerequisites
     if not st.session_state.resume_path:
         st.warning("⚠️ Please upload a resume first in the **Resume Check** section to use job analysis.")
         st.info("💡 The analysis will compare your resume against the job requirements and provide a compatibility score.")
         return
     
+    # Validate job data
+    if not job or not isinstance(job, dict):
+        raise ValidationError("Invalid job data provided for analysis", field="job")
+    
+    analysis_start_time = time.time()
+    
     try:
-        with st.spinner("🔍 Analyzing job compatibility with your resume..."):
-            # Generate ATS report
-            ats_report = generate_ats_report_for_job(job, st.session_state.resume_path)
+        # Validate job has required fields
+        job_title = sanitize_input(job.get('title', 'N/A'))
+        company = sanitize_input(job.get('company', 'N/A'))
+        
+        if job_title == 'N/A':
+            raise ValidationError("Job title is required for analysis", field="job_title")
+        
+        logger.info(f"Starting job analysis for {job_title} at {company}")
+        
+        with ErrorContext("Job Compatibility Analysis", show_spinner=True, show_technical_details=False) as ctx:
+            if not ctx.error_occurred:
+                # Use retry handler for the analysis
+                retry_handler = get_retry_handler('groq')
+                
+                def _generate_analysis():
+                    return generate_ats_report_for_job(job, st.session_state.resume_path)
+                
+                ats_report = retry_handler.retry(
+                    _generate_analysis,
+                    circuit_breaker_key="job_analysis"
+                )
         
         if ats_report and 'error' not in ats_report:
             st.success("✅ Job Analysis Complete!")
@@ -498,6 +714,13 @@ def analyze_job(job):
             # Get the correct score from ats_analysis
             ats_analysis = ats_report.get('ats_analysis', {})
             match_score = ats_analysis.get('ats_score', 0)
+            
+            # Validate score
+            if not isinstance(match_score, (int, float)) or match_score < 0 or match_score > 100:
+                logger.warning(f"Invalid match score received: {match_score}")
+                match_score = 0
+            
+            logger.info(f"Job analysis completed with score: {match_score}%")
             
             # Display analysis results in a nice format
             col1, col2 = st.columns(2)
@@ -522,8 +745,8 @@ def analyze_job(job):
             with col2:
                 st.markdown(f"""
                 <div style='text-align: center; padding: 1rem; background: #f0f2f6; border-radius: 8px;'>
-                    <h4 style='margin: 0;'>📋 {job.get('title', 'N/A')}</h4>
-                    <p style='margin: 0;'>{job.get('company', 'N/A')}</p>
+                    <h4 style='margin: 0;'>📋 {job_title}</h4>
+                    <p style='margin: 0;'>{company}</p>
                 </div>
                 """, unsafe_allow_html=True)
             
@@ -543,9 +766,11 @@ def analyze_job(job):
                     st.write("**✅ Matched Keywords:**")
                     all_matches = []
                     for match in critical_matches:
-                        all_matches.append(f"{match['keyword']} (critical)")
+                        if isinstance(match, dict) and 'keyword' in match:
+                            all_matches.append(f"{match['keyword']} (critical)")
                     for match in general_matches:
-                        all_matches.append(f"{match['keyword']} (general)")
+                        if isinstance(match, dict) and 'keyword' in match:
+                            all_matches.append(f"{match['keyword']} (general)")
                     if all_matches:
                         st.success(", ".join(all_matches[:10]))  # Show top 10
                 
@@ -555,16 +780,19 @@ def analyze_job(job):
                     st.write("**❌ Missing Important Keywords:**")
                     missing_list = []
                     for kw in missing_keywords[:8]:  # Show top 8
-                        category_indicator = "🔴" if kw.get('category') == 'critical' else "🟡"
-                        missing_list.append(f"{category_indicator} {kw['keyword']}")
-                    st.error(", ".join(missing_list))
+                        if isinstance(kw, dict) and 'keyword' in kw:
+                            category_indicator = "🔴" if kw.get('category') == 'critical' else "🟡"
+                            missing_list.append(f"{category_indicator} {kw['keyword']}")
+                    if missing_list:
+                        st.error(", ".join(missing_list))
                 
                 # Show recommendations
                 recommendations = ats_report.get('recommendations', [])
                 if recommendations:
                     st.write("**💡 Improvement Recommendations:**")
                     for rec in recommendations:
-                        st.write(f"• {rec}")
+                        if isinstance(rec, str):
+                            st.write(f"• {rec}")
                 
                 # Show bias analysis if available
                 bias_analysis = ats_report.get('bias_analysis', {})
@@ -575,20 +803,41 @@ def analyze_job(job):
                         st.write(f"Found {len(bias_analysis['bias_flags'])} potential bias indicators in the job posting")
                     else:
                         st.write("**✅ Job Posting Analysis:** No bias concerns detected")
+            
+            # Log performance
+            analysis_duration = time.time() - analysis_start_time
+            performance_logger.log_operation(
+                operation="job_analysis",
+                duration=analysis_duration,
+                success=True,
+                metadata={
+                    "job_title": job_title,
+                    "company": company,
+                    "match_score": match_score,
+                    "has_recommendations": bool(recommendations)
+                }
+            )
                         
         elif ats_report and 'error' in ats_report:
-            st.error(f"❌ Analysis failed: {ats_report['error']}")
+            error_msg = ats_report['error']
+            logger.error(f"Job analysis failed with error: {error_msg}")
+            st.error(f"❌ Analysis failed: {error_msg}")
         else:
+            logger.error("Job analysis failed: No report generated")
             st.error("❌ Failed to generate job analysis. Please try again or check your resume upload.")
             
+    except ValidationError as e:
+        logger.error(f"Validation error in job analysis: {str(e)}")
+        st.error(f"❌ {str(e)}")
+        
     except Exception as e:
-        st.error(f"❌ Error analyzing job: {str(e)}")
-        with st.expander("Error Details"):
-            st.write("This could be due to:")
-            st.write("- Resume parsing issues")
-            st.write("- Missing job information")
-            st.write("- API connectivity problems")
-            st.write(f"Technical details: {str(e)}")
+        logger.error(f"Unexpected error in job analysis: {str(e)}", exc_info=True)
+        error_response = ErrorResponse(e, {
+            "operation": "job_analysis",
+            "job_title": job.get('title', 'Unknown'),
+            "resume_path": st.session_state.resume_path
+        })
+        display_error_to_user(error_response, show_technical_details=True)
 
 def save_applications_to_csv():
     """Save applications to CSV file"""
