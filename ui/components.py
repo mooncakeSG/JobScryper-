@@ -11,6 +11,7 @@ import plotly.graph_objects as go
 from datetime import datetime, timedelta
 from typing import Dict, List, Any, Optional
 import pandas as pd
+import re
 
 def apply_modern_theme():
     """Apply modern theme and styling to the Streamlit app."""
@@ -345,19 +346,25 @@ def create_metric_card(label: str, value: str, delta: Optional[str] = None, icon
 
 
 def create_job_card(job: Dict[str, Any], show_actions: bool = True, user_applied: bool = False):
-    """Create a modern job card with actions."""
-    
+    """Create a modern job card with actions and best-practice description preview/details."""
     # Extract job details
     title = job.get('title', 'Unknown Position')
     company = job.get('company', 'Unknown Company')
     location = job.get('location', 'Unknown Location')
     salary = job.get('salary', '')
     job_type = job.get('job_type', '')
-    description = job.get('description', '')[:200] + "..." if len(job.get('description', '')) > 200 else job.get('description', '')
+    raw_description = job.get('description', '')
     posted_date = job.get('date_posted', '')
     source = job.get('source', 'Unknown')
     match_score = job.get('match_score', 0)
-    
+
+    # Clean and truncate description for preview
+    def strip_html(text):
+        return re.sub('<[^<]+?>', '', text or '')
+    preview = strip_html(raw_description)
+    preview = preview.replace('\n', ' ').replace('\r', ' ')
+    preview = preview[:300] + ("..." if len(preview) > 300 else "")
+
     # Create tags
     tags = []
     if job_type:
@@ -366,18 +373,17 @@ def create_job_card(job: Dict[str, Any], show_actions: bool = True, user_applied
         tags.append(salary)
     if source:
         tags.append(f"via {source}")
-    
     tags_html = ''.join([f'<span class="job-tag">{tag}</span>' for tag in tags])
-    
+
     # Match score indicator
     match_color = "#059669" if match_score >= 80 else "#d97706" if match_score >= 60 else "#64748b"
     match_html = f'<div style="color: {match_color}; font-weight: 500; font-size: 0.875rem;">Match: {match_score}%</div>' if match_score > 0 else ""
-    
+
     # Application status
     status_html = ""
     if user_applied:
         status_html = '<span class="status-badge status-applied">Applied</span>'
-    
+
     card_html = f"""
     <div class="job-card">
         <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 1rem;">
@@ -394,39 +400,36 @@ def create_job_card(job: Dict[str, Any], show_actions: bool = True, user_applied
                 </div>
             </div>
         </div>
-        
-        {f'<div style="margin-bottom: 1rem; color: var(--text-secondary); line-height: 1.5;">{description}</div>' if description else ''}
-        
-        <div class="job-tags">
-            {tags_html}
-        </div>
+        <div style="margin-bottom: 1rem; color: var(--text-secondary); line-height: 1.5;">{preview}</div>
+        <div class="job-tags">{tags_html}</div>
     </div>
     """
-    
     st.markdown(card_html, unsafe_allow_html=True)
-    
+
+    # Details modal/expander for full description
+    with st.expander("🔎 View Full Description", expanded=False):
+        if raw_description:
+            st.markdown(raw_description, unsafe_allow_html=False)
+        else:
+            st.info("No description provided.")
+
     # Action buttons
     if show_actions:
         col1, col2, col3, col4 = st.columns([2, 2, 2, 1])
-        
         with col1:
             if st.button("📄 View Details", key=f"view_{job.get('id', hash(str(job)))}", use_container_width=True):
                 return "view_details"
-        
         with col2:
             if st.button("🤖 AI Analysis", key=f"analyze_{job.get('id', hash(str(job)))}", use_container_width=True):
                 return "analyze"
-        
         with col3:
             apply_label = "✅ Applied" if user_applied else "📤 Apply"
             disabled = user_applied
             if st.button(apply_label, key=f"apply_{job.get('id', hash(str(job)))}", use_container_width=True, disabled=disabled):
                 return "apply"
-        
         with col4:
             if st.button("💾", key=f"save_{job.get('id', hash(str(job)))}", help="Save for later"):
                 return "save"
-    
     return None
 
 
