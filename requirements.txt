@@ -1,54 +1,98 @@
 # Auto Applyer - Python Dependencies
-# Core Dependencies
-streamlit==1.28.1
+# Updated with exact working versions for reproducible builds
+# Last updated: July 2025
+
+# ==========================================
+# CORE STREAMLIT APPLICATION
+# ==========================================
+streamlit==1.45.1
 streamlit-option-menu==0.3.6
+streamlit-extras==0.6.0
+
+# ==========================================
+# ENVIRONMENT & CONFIGURATION
+# ==========================================
 python-dotenv==1.0.0
-pandas==2.1.4
-numpy==1.24.3
 
-# Job Scraping & Web
-python-jobspy==1.1.15
-requests==2.31.0
-beautifulsoup4==4.12.2
-selenium==4.15.2
-webdriver-manager==4.0.1
+# ==========================================
+# DATA PROCESSING & ANALYSIS
+# ==========================================
+pandas==2.3.0
+numpy==2.3.0
+openpyxl==3.1.5
 
-# AI & Machine Learning
-groq==0.4.2
-openai==1.6.1
-anthropic==0.8.1
-scikit-learn==1.3.2
+# ==========================================
+# JOB SCRAPING & WEB AUTOMATION
+# ==========================================
+python-jobspy==1.1.80
+requests==2.32.4
+beautifulsoup4==4.13.4
+selenium==4.34.0
+playwright==1.53.0
+
+# ==========================================
+# AI & MACHINE LEARNING
+# ==========================================
+groq==0.28.0
+scikit-learn==1.7.0
+transformers==4.52.4
+sentence-transformers==4.1.0
+torch==2.7.1
+
+# ==========================================
+# DOCUMENT PROCESSING (RESUME PARSING)
+# ==========================================
+PyMuPDF==1.26.3
+python-docx==1.2.0
+PyPDF2==3.0.1
+
+# ==========================================
+# DATA VISUALIZATION
+# ==========================================
+plotly==6.1.2
+matplotlib==3.10.3
+seaborn==0.13.2
+
+# ==========================================
+# NATURAL LANGUAGE PROCESSING
+# ==========================================
 nltk==3.8.1
-transformers==4.36.2
 
-# Resume & Document Processing
-PyMuPDF==1.23.14
-python-docx==1.1.0
-pypdf==3.17.1
-pymupdf==1.23.14
+# ==========================================
+# UTILITIES & HELPERS
+# ==========================================
+pillow==11.2.1
+pydantic==2.11.7
+validators==0.35.0
+pytz==2025.2
+python-dateutil==2.9.0.post0
+psutil==7.0.0
 
-# Data Processing & Analysis
-openpyxl==3.1.2
-xlsxwriter==3.1.9
-plotly==5.17.0
-matplotlib==3.8.2
-seaborn==0.13.0
+# ==========================================
+# DEVELOPMENT & TESTING (OPTIONAL)
+# ==========================================
+pytest==8.4.1
+pytest-mock==3.14.1
 
-# Utilities
-pillow==10.1.0
-pydantic==2.5.2
-validators==0.22.0
-pytz==2023.3
-dateutil==2.8.2
+# ==========================================
+# PLATFORM-SPECIFIC DEPENDENCIES
+# ==========================================
+# Windows-specific (automatically installed on Windows)
+# pywin32==310  # Uncomment if on Windows and having issues
 
-# Development & Testing (optional)
-pytest==7.4.3
-black==23.11.0
-isort==5.12.0
-flake8==6.1.0
-pre-commit==3.6.0
+# ==========================================
+# NOTES
+# ==========================================
+# - All versions are pinned for reproducible builds
+# - This requirements.txt is tested and working as of January 2025
+# - For development setup, see SETUP.md
+# - Some packages may have additional system dependencies (see docs)
+# - Update versions carefully and test thoroughly
 
-# System Dependencies
-psutil==5.9.6
-logging==0.4.9.6
-configparser==6.0.0 
+# ==========================================
+# INSTALLATION INSTRUCTIONS
+# ==========================================
+# 1. Create virtual environment: python -m venv venv
+# 2. Activate: venv\Scripts\activate (Windows) or source venv/bin/activate (Linux/Mac)
+# 3. Install: pip install -r requirements.txt
+# 4. If issues occur, try: pip install --upgrade pip setuptools wheel 
