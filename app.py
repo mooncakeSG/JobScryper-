@@ -101,6 +101,8 @@ if 'jobs_data' not in st.session_state:
         'linkedin': [], 
         'alternatives': []
     }
+if 'current_jobs' not in st.session_state:
+    st.session_state.current_jobs = []
 if 'resume_path' not in st.session_state:
     st.session_state.resume_path = None
 if 'resume_parsed' not in st.session_state:
@@ -163,7 +165,7 @@ def query_groq(prompt):
             "Content-Type": "application/json"
         }
         data = {
-            "model": "mixtral-8x7b-32768",
+            "model": "meta-llama/llama-4-scout-17b-16e-instruct",
             "messages": [
                 {"role": "user", "content": prompt}
             ]
@@ -201,8 +203,6 @@ def search_jobs(job_title, location, job_type, keywords):
         with st.expander("JobSpy Error Details"):
             st.write(str(e))
     
-    # Indeed is already covered by JobSpy (which successfully searches Indeed + LinkedIn + others)
-    # Removed standalone Indeed scraper due to consistent blocking and slow performance
     # Alternative Sources
     try:
         with st.spinner("Searching enhanced APIs (RemoteOK, Adzuna, Jooble, AngelCo, FlexJobs)..."):
@@ -227,50 +227,187 @@ def display_job_card(job, source):
     source_icon = {
         'jobspy': '<i class="fa fa-rocket"></i>',
         'linkedin': '<i class="fa fa-linkedin"></i>', 
-        'alternatives': '<i class="fa fa-globe"></i>'
+        'alternatives': '<i class="fa fa-globe"></i>',
+        'remoteok': '<i class="fa fa-laptop"></i>',
+        'adzuna': '<i class="fa fa-search"></i>',
+        'jooble': '<i class="fa fa-briefcase"></i>'
     }
     
-    source_name = job.get('source', source.title())
-    title_prefix = f"{source_icon.get(source, '<i class=\"fa fa-clipboard\"></i>')} [{source_name}]"
+    # Get more accurate source name
+    actual_source = job.get('source', source.title())
+    source_key = source.lower()
+    if actual_source.lower() in ['remoteok', 'adzuna', 'jooble']:
+        source_key = actual_source.lower()
     
-    # Get job details
-    title = job.get('title', 'N/A')
-    company = job.get('company', 'N/A')
-    location = job.get('location', 'N/A')
-    date_posted = job.get('date_posted', job.get('posted_date', 'N/A'))
+    title_prefix = f"{source_icon.get(source_key, '<i class=\"fa fa-clipboard\"></i>')} [{actual_source}]"
     
-    # Display job card
+    # Get job details with better validation
+    title = job.get('title', 'Position Title Not Available')
+    company = job.get('company', 'Company Name Not Available')
+    location = job.get('location', 'Location Not Specified')
+    date_posted = job.get('date_posted', job.get('posted_date', 'Date Not Available'))
+    salary = job.get('salary', '')
+    job_type = job.get('job_type', '')
+    description = job.get('description', '')
+    
+    # Validate and clean data
+    if title in ['N/A', 'Unknown', 'null', 'None']:
+        title = 'Position Title Not Available'
+    if company in ['N/A', 'Unknown', 'null', 'None']:
+        company = 'Company Name Not Available'
+    
+    # Create a more informative job card
     st.markdown(f"""
-    <div style='border:1px solid #eee; padding:15px; border-radius:10px; margin-bottom:15px; background-color: #f9f9f9;'>
-        <h5><i class='fa fa-briefcase'></i> {title}</h5>
-        <p><i class='fa fa-building'></i> <strong>{company}</strong></p>
-        <p><i class='fa fa-map-marker-alt'></i> {location} | <i class='fa fa-clock'></i> {date_posted}</p>
-        <p><i class='fa fa-tag'></i> {title_prefix}</p>
-    </div>
+    <div style='border:1px solid #ddd; padding:20px; border-radius:12px; margin-bottom:20px; 
+                background: linear-gradient(135deg, #f8f9fa 0%, #ffffff 100%); 
+                box-shadow: 0 2px 4px rgba(0,0,0,0.1);'>
+        <div style='display: flex; justify-content: between; align-items: start; margin-bottom: 12px;'>
+            <h4 style='margin: 0; color: #2c3e50; font-weight: 600;'>
+                <i class='fa fa-briefcase' style='color: #3498db; margin-right: 8px;'></i>{title}
+            </h4>
+            <span style='background: #e3f2fd; color: #1976d2; padding: 4px 8px; border-radius: 20px; font-size: 12px; font-weight: 500;'>
+                {title_prefix}
+            </span>
+        </div>
+        <div style='margin-bottom: 15px;'>
+            <p style='margin: 5px 0; color: #34495e; font-weight: 500;'>
+                <i class='fa fa-building' style='color: #e74c3c; margin-right: 8px; width: 16px;'></i><strong>{company}</strong>
+            </p>
+            <p style='margin: 5px 0; color: #7f8c8d;'>
+                <i class='fa fa-map-marker-alt' style='color: #27ae60; margin-right: 8px; width: 16px;'></i>{location}
+                <span style='margin-left: 20px;'>
+                    <i class='fa fa-clock' style='color: #f39c12; margin-right: 8px;'></i>{date_posted}
+                </span>
+            </p>
+        </div>
     """, unsafe_allow_html=True)
     
-    # Apply button
+    # Add additional job details if available
+    details_html = ""
+    if salary and salary not in ['', 'N/A', 'Not specified']:
+        details_html += f"""
+            <p style='margin: 5px 0; color: #27ae60; font-weight: 500;'>
+                <i class='fa fa-dollar-sign' style='margin-right: 8px; width: 16px;'></i>{salary}
+            </p>
+        """
+    
+    if job_type and job_type not in ['', 'N/A', 'Not specified']:
+        details_html += f"""
+            <p style='margin: 5px 0; color: #8e44ad;'>
+                <i class='fa fa-tags' style='margin-right: 8px; width: 16px;'></i>{job_type}
+            </p>
+        """
+    
+    # Show job description preview if available
+    if description and len(description.strip()) > 10:
+        preview = description[:200] + "..." if len(description) > 200 else description
+        details_html += f"""
+            <div style='margin-top: 10px; padding: 12px; background: #f8f9fa; border-radius: 8px; border-left: 4px solid #3498db;'>
+                <p style='margin: 0; color: #555; font-size: 14px; line-height: 1.4;'>
+                    <i class='fa fa-file-text' style='color: #3498db; margin-right: 8px;'></i>
+                    <strong>Description:</strong> {preview}
+                </p>
+            </div>
+        """
+    
+    # Check for special features
+    features = []
+    if job.get('easy_apply', False):
+        features.append('<span style="background: #4caf50; color: white; padding: 2px 6px; border-radius: 12px; font-size: 11px;">Easy Apply</span>')
+    if job.get('remote', False) or 'remote' in location.lower():
+        features.append('<span style="background: #2196f3; color: white; padding: 2px 6px; border-radius: 12px; font-size: 11px;">Remote</span>')
+    if 'urgent' in title.lower() or 'immediate' in description.lower():
+        features.append('<span style="background: #ff9800; color: white; padding: 2px 6px; border-radius: 12px; font-size: 11px;">Urgent</span>')
+    
+    if features:
+        details_html += f"""
+            <div style='margin-top: 10px;'>
+                {' '.join(features)}
+            </div>
+        """
+    
+    if details_html:
+        st.markdown(details_html, unsafe_allow_html=True)
+    
+    st.markdown("</div>", unsafe_allow_html=True)
+    
+    # Apply and Analyze buttons with better spacing
     col1, col2, col3 = st.columns([1, 1, 2])
     with col1:
-        if st.button("Apply", key=f"apply_{job.get('id', hash(str(job)))}"):
+        if st.button("Apply", key=f"apply_{job.get('id', hash(str(job)))}", use_container_width=True):
             apply_to_job(job, source)
     
     with col2:
-        if st.button("Analyze", key=f"analyze_{job.get('id', hash(str(job)))}"):
+        if st.button("Analyze", key=f"analyze_{job.get('id', hash(str(job)))}", use_container_width=True):
             analyze_job(job)
+    
+    with col3:
+        # Show data quality indicator
+        data_quality = calculate_job_data_quality(job)
+        quality_color = "#4caf50" if data_quality >= 80 else "#ff9800" if data_quality >= 60 else "#f44336"
+        st.markdown(f"""
+        <div style='text-align: right; margin-top: 8px; color: {quality_color}; font-size: 12px;'>
+            <i class='fa fa-info-circle'></i> Data Quality: {data_quality}%
+        </div>
+        """, unsafe_allow_html=True)
+
+def calculate_job_data_quality(job):
+    """Calculate data quality score for a job posting"""
+    score = 0
+    total_fields = 8
+    
+    # Check essential fields
+    if job.get('title') and job['title'] not in ['', 'N/A', 'Unknown', 'null']:
+        score += 1
+    if job.get('company') and job['company'] not in ['', 'N/A', 'Unknown', 'null']:
+        score += 1
+    if job.get('location') and job['location'] not in ['', 'N/A', 'Not specified', 'null']:
+        score += 1
+    if job.get('description') and len(job['description'].strip()) > 20:
+        score += 1
+    
+    # Check additional valuable fields
+    if job.get('salary') and job['salary'] not in ['', 'N/A', 'Not specified']:
+        score += 1
+    if job.get('job_type') and job['job_type'] not in ['', 'N/A', 'Not specified']:
+        score += 1
+    if job.get('date_posted', job.get('posted_date')) and job.get('date_posted', job.get('posted_date')) not in ['', 'N/A', 'Date Not Available']:
+        score += 1
+    if job.get('url', job.get('job_url')) and str(job.get('url', job.get('job_url'))).startswith(('http://', 'https://')):
+        score += 1
+    
+    return round((score / total_fields) * 100)
 
 def apply_to_job(job, source):
     """Apply to a job and track the application"""
     try:
+        # Validate job data
+        job_title = job.get('title', 'Unknown Position')
+        company = job.get('company', 'Unknown Company')
+        job_url = job.get('job_url', job.get('url', ''))
+        
+        # Validate URL
+        if not job_url or job_url in ['', 'N/A', 'Unknown']:
+            st.warning(f"⚠️ No valid job URL found for **{job_title}** at **{company}**")
+            st.info("💡 This usually means the job posting doesn't have a direct application link. You may need to search for this position on the company's careers page.")
+            return
+        
+        # Check for LinkedIn Easy Apply
+        is_easy_apply = job.get('easy_apply', False)
+        
         # Create application record
         application = {
-            'job_title': job.get('title', 'N/A'),
-            'company': job.get('company', 'N/A'),
-            'location': job.get('location', 'N/A'),
+            'job_title': job_title,
+            'company': company,
+            'location': job.get('location', 'Not specified'),
             'source': source,
             'applied_date': datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-            'status': 'Applied',
-            'job_url': job.get('job_url', job.get('url', 'N/A'))
+            'status': 'Tracked - Manual Application Required',
+            'job_url': job_url,
+            'easy_apply': is_easy_apply,
+            'salary': job.get('salary', 'Not specified'),
+            'job_type': job.get('job_type', 'Not specified'),
+            'application_method': 'Manual (External URL)' if not is_easy_apply else 'LinkedIn Easy Apply Available'
         }
         
         # Add to session state
@@ -279,39 +416,179 @@ def apply_to_job(job, source):
         # Save to file
         save_applications_to_csv()
         
-        st.success(f"Applied to {job.get('title', 'N/A')} at {job.get('company', 'N/A')}")
+        st.success(f"✅ Application tracked for **{job_title}** at **{company}**!")
+        
+        # Show application summary
+        with st.expander("📋 Application Details & Next Steps"):
+            col1, col2 = st.columns(2)
+            
+            with col1:
+                st.write("**Position Details:**")
+                st.write(f"**Title:** {application['job_title']}")
+                st.write(f"**Company:** {application['company']}")
+                st.write(f"**Location:** {application['location']}")
+                st.write(f"**Source:** {application['source']}")
+                if application['salary'] != 'Not specified':
+                    st.write(f"**Salary:** {application['salary']}")
+            
+            with col2:
+                st.write("**Application Info:**")
+                st.write(f"**Tracked:** {application['applied_date']}")
+                st.write(f"**Method:** {application['application_method']}")
+                st.write(f"**Status:** {application['status']}")
+                
+                # Show special LinkedIn Easy Apply info
+                if is_easy_apply:
+                    st.info("🎯 This job supports LinkedIn Easy Apply! You can apply directly on LinkedIn.")
+            
+            # Action buttons
+            st.write("**Next Steps:**")
+            
+            # Validate URL before showing button
+            if job_url.startswith(('http://', 'https://')):
+                if st.button(f"🔗 Open Job Application", key=f"open_{hash(job_url)}"):
+                    st.markdown(f'<a href="{job_url}" target="_blank">Click here if the job didn\'t open automatically</a>', unsafe_allow_html=True)
+                    # Use JavaScript to open in new tab
+                    st.markdown(f"""
+                    <script>
+                        window.open('{job_url}', '_blank');
+                    </script>
+                    """, unsafe_allow_html=True)
+                    
+                st.write("1. Click the button above to open the job application")
+                st.write("2. Complete the application on the company's website")
+                st.write("3. Update the status in the Stats section when done")
+            else:
+                st.warning("⚠️ Invalid job URL format. Please search for this position manually.")
+                st.write(f"**Search for:** {job_title} at {company}")
+                
+            # LinkedIn specific instructions
+            if 'linkedin' in source.lower() and is_easy_apply:
+                st.write("**LinkedIn Easy Apply Tips:**")
+                st.write("• Make sure your LinkedIn profile is complete")
+                st.write("• Have your resume uploaded to LinkedIn")
+                st.write("• Check for required questions before submitting")
+            
+            # General application tips
+            st.write("**💡 Application Tips:**")
+            st.write("• Tailor your resume to match the job requirements")
+            st.write("• Use keywords from the job description")
+            st.write("• Write a compelling cover letter if required")
+            st.write("• Follow up after 1-2 weeks if you don't hear back")
         
     except Exception as e:
-        st.error(f"Error applying to job: {str(e)}")
+        st.error(f"❌ Error tracking application: {str(e)}")
+        st.info("💡 You can still apply manually by visiting the company's careers page.")
 
 def analyze_job(job):
     """Analyze job compatibility with resume"""
     if not st.session_state.resume_path:
-        st.warning("Please upload a resume first in the Resume Check section")
+        st.warning("⚠️ Please upload a resume first in the **Resume Check** section to use job analysis.")
+        st.info("💡 The analysis will compare your resume against the job requirements and provide a compatibility score.")
         return
     
     try:
-        # Generate ATS report
-        ats_report = generate_ats_report_for_job(job, st.session_state.resume_path)
+        with st.spinner("🔍 Analyzing job compatibility with your resume..."):
+            # Generate ATS report
+            ats_report = generate_ats_report_for_job(job, st.session_state.resume_path)
         
-        if ats_report:
-            st.success("ATS Analysis Complete!")
+        if ats_report and 'error' not in ats_report:
+            st.success("✅ Job Analysis Complete!")
             
-            # Display analysis results
-            with st.expander("ATS Analysis Results"):
-                st.write("**Match Score:**", f"{ats_report.get('match_score', 0)}%")
-                st.write("**Missing Keywords:**", ", ".join(ats_report.get('missing_keywords', [])))
-                st.write("**Matched Keywords:**", ", ".join(ats_report.get('matched_keywords', [])))
+            # Get the correct score from ats_analysis
+            ats_analysis = ats_report.get('ats_analysis', {})
+            match_score = ats_analysis.get('ats_score', 0)
+            
+            # Display analysis results in a nice format
+            col1, col2 = st.columns(2)
+            with col1:
+                if match_score >= 70:
+                    score_color = "green"
+                    score_icon = "🟢"
+                elif match_score >= 50:
+                    score_color = "orange"
+                    score_icon = "🟡"
+                else:
+                    score_color = "red"
+                    score_icon = "🔴"
                 
-                if 'suggestions' in ats_report:
-                    st.write("**Improvement Suggestions:**")
-                    for suggestion in ats_report['suggestions']:
-                        st.write(f"• {suggestion}")
+                st.markdown(f"""
+                <div style='text-align: center; padding: 1rem; background: #f0f2f6; border-radius: 8px;'>
+                    <h3 style='color: {score_color}; margin: 0;'>{score_icon} {match_score}%</h3>
+                    <p style='margin: 0;'>Compatibility Score</p>
+                </div>
+                """, unsafe_allow_html=True)
+            
+            with col2:
+                st.markdown(f"""
+                <div style='text-align: center; padding: 1rem; background: #f0f2f6; border-radius: 8px;'>
+                    <h4 style='margin: 0;'>📋 {job.get('title', 'N/A')}</h4>
+                    <p style='margin: 0;'>{job.get('company', 'N/A')}</p>
+                </div>
+                """, unsafe_allow_html=True)
+            
+            # Show detailed analysis
+            with st.expander("📊 Detailed Analysis Results", expanded=True):
+                # Display ATS score details
+                st.markdown(f"**🎯 ATS Score Details:**")
+                earned_points = ats_analysis.get('earned_points', 0)
+                possible_points = ats_analysis.get('possible_points', 0)
+                st.info(f"Earned {earned_points} out of {possible_points} possible points")
+                
+                # Show matched keywords
+                critical_matches = ats_analysis.get('critical_matches', [])
+                general_matches = ats_analysis.get('general_matches', [])
+                
+                if critical_matches or general_matches:
+                    st.write("**✅ Matched Keywords:**")
+                    all_matches = []
+                    for match in critical_matches:
+                        all_matches.append(f"{match['keyword']} (critical)")
+                    for match in general_matches:
+                        all_matches.append(f"{match['keyword']} (general)")
+                    if all_matches:
+                        st.success(", ".join(all_matches[:10]))  # Show top 10
+                
+                # Show missing keywords
+                missing_keywords = ats_report.get('missing_keywords', [])
+                if missing_keywords:
+                    st.write("**❌ Missing Important Keywords:**")
+                    missing_list = []
+                    for kw in missing_keywords[:8]:  # Show top 8
+                        category_indicator = "🔴" if kw.get('category') == 'critical' else "🟡"
+                        missing_list.append(f"{category_indicator} {kw['keyword']}")
+                    st.error(", ".join(missing_list))
+                
+                # Show recommendations
+                recommendations = ats_report.get('recommendations', [])
+                if recommendations:
+                    st.write("**💡 Improvement Recommendations:**")
+                    for rec in recommendations:
+                        st.write(f"• {rec}")
+                
+                # Show bias analysis if available
+                bias_analysis = ats_report.get('bias_analysis', {})
+                if bias_analysis:
+                    bias_level = bias_analysis.get('bias_level', 'Unknown')
+                    if bias_analysis.get('bias_flags'):
+                        st.write(f"**⚠️ Job Posting Bias Analysis:** {bias_level}")
+                        st.write(f"Found {len(bias_analysis['bias_flags'])} potential bias indicators in the job posting")
+                    else:
+                        st.write("**✅ Job Posting Analysis:** No bias concerns detected")
+                        
+        elif ats_report and 'error' in ats_report:
+            st.error(f"❌ Analysis failed: {ats_report['error']}")
         else:
-            st.error("Failed to generate ATS analysis")
+            st.error("❌ Failed to generate job analysis. Please try again or check your resume upload.")
             
     except Exception as e:
-        st.error(f"Error analyzing job: {str(e)}")
+        st.error(f"❌ Error analyzing job: {str(e)}")
+        with st.expander("Error Details"):
+            st.write("This could be due to:")
+            st.write("- Resume parsing issues")
+            st.write("- Missing job information")
+            st.write("- API connectivity problems")
+            st.write(f"Technical details: {str(e)}")
 
 def save_applications_to_csv():
     """Save applications to CSV file"""
@@ -402,40 +679,53 @@ if selected == "Job Search":
         # Search for jobs
         jobs = search_jobs(job_title, location, job_type, keywords)
         
-        if jobs:
-            st.markdown(f"""
-            <div style='text-align: center; padding: 1rem 0; background: #d4edda; border-radius: 8px; margin: 1rem 0;'>
-                <h4><i class="fa fa-check-circle" style="color: #155724;"></i> Found {len(jobs)} Jobs Total</h4>
-            </div>
-            """, unsafe_allow_html=True)
+        # Store search results in session state
+        st.session_state.current_jobs = jobs
+        
+    # Display jobs if they exist (either from new search or previous search)
+    all_existing_jobs = []
+    for source_jobs in st.session_state.jobs_data.values():
+        all_existing_jobs.extend(source_jobs)
+    
+    # Use current_jobs if available, otherwise use jobs from jobs_data
+    display_jobs = getattr(st.session_state, 'current_jobs', all_existing_jobs)
+    
+    if display_jobs:
+        st.markdown("<hr>", unsafe_allow_html=True)
+        st.markdown(f"""
+        <div style='text-align: center; padding: 1rem 0; background: #d4edda; border-radius: 8px; margin: 1rem 0;'>
+            <h4><i class="fa fa-check-circle" style="color: #155724;"></i> Found {len(display_jobs)} Jobs Total</h4>
+        </div>
+        """, unsafe_allow_html=True)
+        
+        # Show breakdown by source
+        col1, col2 = st.columns(2)
+        with col1:
+            jobspy_count = len(st.session_state.jobs_data.get('jobspy', []))
+            st.metric("JobSpy (Multi-platform)", jobspy_count)
+        with col2:
+            alt_count = len(st.session_state.jobs_data.get('alternatives', []))
+            st.metric("Alternative Sources", alt_count)
+        
+        # Display jobs
+        for i, job in enumerate(display_jobs):
+            source = job.get('source', 'unknown')
+            display_job_card(job, source)
             
-            # Show breakdown by source
-            col1, col2 = st.columns(2)
-            with col1:
-                jobspy_count = len(st.session_state.jobs_data.get('jobspy', []))
-                st.metric("JobSpy (Multi-platform)", jobspy_count)
-            with col2:
-                alt_count = len(st.session_state.jobs_data.get('alternatives', []))
-                st.metric("Alternative Sources", alt_count)
-            
-            # Display jobs
-            for i, job in enumerate(jobs):
-                source = job.get('source', 'unknown')
-                display_job_card(job, source)
-                
-        else:
-            st.markdown("""
-            <div style='text-align: center; padding: 2rem; background: #fff3cd; border-radius: 8px; margin: 1rem 0;'>
-                <h4><i class="fa fa-exclamation-triangle" style="color: #856404;"></i> No Jobs Found</h4>
-                <p>This could be due to:</p>
-                <ul style='text-align: left; display: inline-block;'>
-                    <li>Job sites blocking scrapers (common)</li>
-                    <li>Very specific search terms</li>
-                    <li>Network restrictions</li>
-                </ul>
-                <p><strong>Try:</strong> Different keywords, broader location, or check back later</p>
-            </div>
-            """, unsafe_allow_html=True)
+    elif submitted and job_title:
+        # Only show "no jobs found" message if a search was just performed
+        st.markdown("""
+        <div style='text-align: center; padding: 2rem; background: #fff3cd; border-radius: 8px; margin: 1rem 0;'>
+            <h4><i class="fa fa-exclamation-triangle" style="color: #856404;"></i> No Jobs Found</h4>
+            <p>This could be due to:</p>
+            <ul style='text-align: left; display: inline-block;'>
+                <li>Job sites blocking scrapers (common)</li>
+                <li>Very specific search terms</li>
+                <li>Network restrictions</li>
+            </ul>
+            <p><strong>Try:</strong> Different keywords, broader location, or check back later</p>
+        </div>
+        """, unsafe_allow_html=True)
 
 elif selected == "Resume Check":
     st.markdown("""
@@ -466,7 +756,23 @@ elif selected == "Resume Check":
                 with col1:
                     st.metric("Characters", parsed_data.get('cleaned_text_length', 0))
                 with col2:
-                    st.metric("Words", len(parsed_data.get('cleaned_text', '').split()))
+                    # Get text from the correct location in the parsed data
+                    resume_text = ""
+                    if 'sections' in parsed_data:
+                        resume_text = parsed_data['sections'].get('full_text', '')
+                    
+                    # Fallback to other possible locations
+                    if not resume_text:
+                        resume_text = (
+                            parsed_data.get('cleaned_text', '') or 
+                            parsed_data.get('text', '') or 
+                            parsed_data.get('raw_text', '') or
+                            parsed_data.get('content', '') or
+                            ''
+                        )
+                    
+                    word_count = len(resume_text.split()) if resume_text else 0
+                    st.metric("Words", word_count)
                 
                 # AI Analysis
                 st.markdown("### <i class='fa fa-robot'></i> AI Analysis & Suggestions", unsafe_allow_html=True)
@@ -474,28 +780,45 @@ elif selected == "Resume Check":
                 if st.button("Generate AI Suggestions", use_container_width=True):
                     with st.spinner("Analyzing resume..."):
                         try:
-                            resume_text = parsed_data.get('cleaned_text', '')
-                            prompt = f"""
-                            Analyze the following resume for ATS compliance and provide specific suggestions for improvement for IT Support and tech roles in South Africa. Focus on:
-                            1. ATS optimization (keywords, formatting)
-                            2. Skills section improvements
-                            3. Experience descriptions
-                            4. Technical skills alignment
-                            5. Local market relevance
+                            # Get text from the correct location in the parsed data
+                            resume_text = ""
+                            if 'sections' in parsed_data:
+                                resume_text = parsed_data['sections'].get('full_text', '')
                             
-                            Resume:
-                            {resume_text}
+                            # Fallback to other possible locations
+                            if not resume_text:
+                                resume_text = (
+                                    parsed_data.get('cleaned_text', '') or 
+                                    parsed_data.get('text', '') or 
+                                    parsed_data.get('raw_text', '') or
+                                    parsed_data.get('content', '') or
+                                    ''
+                                )
                             
-                            Provide actionable suggestions in bullet points.
-                            """
-                            
-                            suggestions = query_groq(prompt)
-                            
-                            st.markdown("### <i class='fa fa-lightbulb'></i> AI Suggestions", unsafe_allow_html=True)
-                            st.write(suggestions)
-                            
-                            # Save suggestions
-                            st.session_state.groq_suggestions[resume_path] = suggestions
+                            if not resume_text:
+                                st.error("No text could be extracted from the resume. Please try uploading again.")
+                            else:
+                                prompt = f"""
+                                Analyze the following resume for ATS compliance and provide specific suggestions for improvement for IT Support and tech roles in South Africa. Focus on:
+                                1. ATS optimization (keywords, formatting)
+                                2. Skills section improvements
+                                3. Experience descriptions
+                                4. Technical skills alignment
+                                5. Local market relevance
+                                
+                                Resume:
+                                {resume_text}
+                                
+                                Provide actionable suggestions in bullet points.
+                                """
+                                
+                                suggestions = query_groq(prompt)
+                                
+                                st.markdown("### <i class='fa fa-lightbulb'></i> AI Suggestions", unsafe_allow_html=True)
+                                st.write(suggestions)
+                                
+                                # Save suggestions
+                                st.session_state.groq_suggestions[resume_path] = suggestions
                             
                         except Exception as e:
                             st.error(f"Error generating suggestions: {str(e)}")
@@ -513,22 +836,38 @@ elif selected == "Apply AI":
     </div>
     """, unsafe_allow_html=True)
     
+    # Initialize session state for Apply AI
+    if 'ai_recommendations' not in st.session_state:
+        st.session_state.ai_recommendations = None
+    if 'ai_skills' not in st.session_state:
+        st.session_state.ai_skills = ""
+    if 'ai_focus_area' not in st.session_state:
+        st.session_state.ai_focus_area = "IT Support"
+    if 'interview_tips' not in st.session_state:
+        st.session_state.interview_tips = None
+    
     # Skills input form
     with st.form("ai_form"):
         skills = st.text_area(
             "Describe your skills, experience, and career goals:",
             placeholder="e.g. I have 3 years of IT support experience, skilled in Windows, networking, troubleshooting...",
+            value=st.session_state.ai_skills,
             height=150
         )
         
         focus_area = st.selectbox(
             "Focus Area",
-            ["IT Support", "Software Development", "Data Analysis", "Cybersecurity", "DevOps", "General Tech"]
+            ["IT Support", "Software Development", "Data Analysis", "Cybersecurity", "DevOps", "General Tech"],
+            index=["IT Support", "Software Development", "Data Analysis", "Cybersecurity", "DevOps", "General Tech"].index(st.session_state.ai_focus_area)
         )
         
         submitted = st.form_submit_button("Generate Job Matches", use_container_width=True)
 
+    # Handle form submission
     if submitted and skills:
+        st.session_state.ai_skills = skills
+        st.session_state.ai_focus_area = focus_area
+        
         with st.spinner("Generating personalized job recommendations..."):
             try:
                 match_prompt = f"""
@@ -549,33 +888,106 @@ elif selected == "Apply AI":
                 """
                 
                 recommendations = query_groq(match_prompt)
+                st.session_state.ai_recommendations = recommendations
                 
-                st.markdown("### <i class='fa fa-bullseye'></i> Personalized Job Recommendations", unsafe_allow_html=True)
-                st.write(recommendations)
+                # Clear previous interview tips when new recommendations are generated
+                st.session_state.interview_tips = None
                 
-                # Additional AI-powered suggestions
-                if st.button("Get Interview Preparation Tips"):
-                    with st.spinner("Generating interview tips..."):
+            except Exception as e:
+                st.error(f"Error generating recommendations: {str(e)}")
+
+    # Display recommendations if available
+    if st.session_state.ai_recommendations:
+        st.markdown("### <i class='fa fa-bullseye'></i> Personalized Job Recommendations", unsafe_allow_html=True)
+        st.write(st.session_state.ai_recommendations)
+        
+        # Interview Tips Button (now always available when recommendations exist)
+        st.markdown("---")
+        col1, col2, col3 = st.columns([1, 2, 1])
+        with col2:
+            if st.button("🎯 Get Interview Preparation Tips", use_container_width=True, type="primary"):
+                with st.spinner("Generating personalized interview tips..."):
+                    try:
                         interview_prompt = f"""
-                        Based on this profile for {focus_area} roles, provide specific interview preparation tips:
+                        Based on this profile for {st.session_state.ai_focus_area} roles, provide specific interview preparation tips:
                         
-                        Skills: {skills}
+                        Skills: {st.session_state.ai_skills}
                         
                         Include:
-                        1. Technical questions to expect
-                        2. Projects to mention
-                        3. Skills to demonstrate
-                        4. Common interview scenarios
-                        5. Questions to ask the interviewer
+                        1. Technical questions to expect for {st.session_state.ai_focus_area}
+                        2. Projects and experiences to mention
+                        3. Skills to demonstrate during the interview
+                        4. Common behavioral and situational interview scenarios
+                        5. Smart questions to ask the interviewer
+                        6. Red flags to watch for during the interview
+                        
+                        Make it specific to the South African tech market and {st.session_state.ai_focus_area} field.
                         """
                         
                         interview_tips = query_groq(interview_prompt)
+                        st.session_state.interview_tips = interview_tips
                         
-                        st.markdown("### <i class='fa fa-handshake'></i> Interview Preparation", unsafe_allow_html=True)
-                        st.write(interview_tips)
-                        
-            except Exception as e:
-                st.error(f"Error generating recommendations: {str(e)}")
+                    except Exception as e:
+                        st.error(f"Error generating interview tips: {str(e)}")
+
+    # Display interview tips if available
+    if st.session_state.interview_tips:
+        st.markdown("---")
+        st.markdown("### <i class='fa fa-handshake'></i> Interview Preparation Tips", unsafe_allow_html=True)
+        st.markdown(f"""
+        <div style='background: #f0f8ff; padding: 1rem; border-radius: 8px; border-left: 4px solid #1976d2; margin: 1rem 0;'>
+            <p style='margin: 0; color: #1976d2; font-weight: 500;'>
+                <i class='fa fa-lightbulb'></i> Personalized for {st.session_state.ai_focus_area} roles
+            </p>
+        </div>
+        """, unsafe_allow_html=True)
+        
+        st.write(st.session_state.interview_tips)
+        
+        # Download button for interview tips
+        col1, col2, col3 = st.columns([1, 2, 1])
+        with col2:
+            if st.button("📥 Download Interview Tips", use_container_width=True):
+                timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+                filename = f"interview_tips_{st.session_state.ai_focus_area.lower().replace(' ', '_')}_{timestamp}.txt"
+                
+                # Create downloadable content
+                content = f"""
+INTERVIEW PREPARATION TIPS
+=========================
+
+Focus Area: {st.session_state.ai_focus_area}
+Generated: {datetime.now().strftime("%Y-%m-%d %H:%M:%S")}
+
+Skills Profile:
+{st.session_state.ai_skills}
+
+INTERVIEW TIPS:
+{st.session_state.interview_tips}
+
+---
+Generated by JOBscraper AI Assistant
+                """.strip()
+                
+                st.download_button(
+                    label="📄 Download as TXT file",
+                    data=content,
+                    file_name=filename,
+                    mime="text/plain",
+                    use_container_width=True
+                )
+
+    # Reset functionality
+    if st.session_state.ai_recommendations or st.session_state.interview_tips:
+        st.markdown("---")
+        col1, col2, col3 = st.columns([1, 2, 1])
+        with col2:
+            if st.button("🔄 Start New Analysis", use_container_width=True):
+                st.session_state.ai_recommendations = None
+                st.session_state.interview_tips = None
+                st.session_state.ai_skills = ""
+                st.session_state.ai_focus_area = "IT Support"
+                st.rerun()
 
 elif selected == "Stats":
     st.markdown("""
@@ -689,6 +1101,6 @@ elif selected == "Stats":
 st.markdown("---")
 st.markdown("""
 <div style='text-align: center; color: #666; padding: 1rem 0;'>
-    <p> JOBscraper | Built with Streamlit</p>
+    <p>JOBscraper | Built with Streamlit</p>
 </div>
 """, unsafe_allow_html=True) 
