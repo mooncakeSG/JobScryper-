@@ -13,6 +13,63 @@ from typing import Dict, List, Any, Optional
 import pandas as pd
 import re
 
+# Add Font Awesome CDN
+st.markdown('<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">', unsafe_allow_html=True)
+
+# Add meta tags to suppress browser warnings
+st.markdown("""
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="theme-color" content="#2563eb">
+<style>
+/* Suppress browser console warnings */
+iframe {
+    border: none;
+}
+/* Hide Streamlit elements that cause console warnings */
+.stApp > header {
+    display: none;
+}
+</style>
+""", unsafe_allow_html=True)
+
+def clean_html_text(text: str) -> str:
+    """Clean HTML tags and entities from text."""
+    if not text:
+        return ''
+    
+    # Remove HTML comments
+    text = re.sub(r'<!--.*?-->', '', text, flags=re.DOTALL)
+    
+    # Remove script and style tags with their content
+    text = re.sub(r'<script[^>]*>.*?</script>', '', text, flags=re.DOTALL | re.IGNORECASE)
+    text = re.sub(r'<style[^>]*>.*?</style>', '', text, flags=re.DOTALL | re.IGNORECASE)
+    
+    # Remove HTML tags
+    text = re.sub('<[^<]+?>', '', text)
+    
+    # Handle common HTML entities
+    text = text.replace('&amp;', '&')
+    text = text.replace('&lt;', '<')
+    text = text.replace('&gt;', '>')
+    text = text.replace('&quot;', '"')
+    text = text.replace('&#39;', "'")
+    text = text.replace('&nbsp;', ' ')
+    text = text.replace('&ndash;', '–')
+    text = text.replace('&mdash;', '—')
+    text = text.replace('&hellip;', '…')
+    text = text.replace('&copy;', '©')
+    text = text.replace('&reg;', '®')
+    text = text.replace('&trade;', '™')
+    
+    # Handle numeric HTML entities
+    text = re.sub(r'&#\d+;', '', text)
+    text = re.sub(r'&#x[0-9a-fA-F]+;', '', text)
+    
+    # Clean up extra whitespace
+    text = re.sub(r'\s+', ' ', text)
+    return text.strip()
+
+
 def apply_modern_theme():
     """Apply modern theme and styling to the Streamlit app."""
     st.markdown("""
@@ -320,14 +377,86 @@ def apply_modern_theme():
 
 def create_app_header(title: str, subtitle: str, user_name: Optional[str] = None):
     """Create a modern app header with user info."""
-    user_info = f" | Welcome, {user_name}" if user_name else ""
-    
+    st.markdown("""
+    <style>
+    .app-header {
+        background: linear-gradient(135deg, #2563eb 0%, #3b82f6 100%);
+        padding: 1.5rem 2rem;
+        border-radius: 1rem;
+        color: white;
+        margin-bottom: 2rem;
+        box-shadow: 0 8px 16px rgba(0,0,0,0.1);
+        text-align: left;
+    }
+    .app-header h1 {
+        font-size: 2rem;
+        margin: 0 0 0.25rem 0;
+        font-weight: 700;
+    }
+    .app-header p {
+        font-size: 1rem;
+        font-weight: 400;
+        margin: 0;
+        opacity: 0.9;
+    }
+    .app-header .user {
+        font-size: 0.875rem;
+        margin-top: 0.75rem;
+        font-style: italic;
+        opacity: 0.85;
+    }
+    </style>
+    """, unsafe_allow_html=True)
+
+    user_html = f"<div class='user'>Welcome, {user_name}</div>" if user_name else ""
+
     st.markdown(f"""
     <div class="app-header">
-        <h1>🚀 {title}</h1>
-        <p>{subtitle}{user_info}</p>
+        <h1>{title}</h1>
+        <p>{subtitle}</p>
+        {user_html}
     </div>
     """, unsafe_allow_html=True)
+
+
+def create_quick_action_nav(actions: List[Dict[str, str]]):
+    """Create a responsive quick action navigation component."""
+    st.markdown("""
+    <style>
+    .quick-actions {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 1rem;
+        margin-bottom: 2rem;
+    }
+    .quick-action {
+        background: #ffffff;
+        border: 1px solid #e2e8f0;
+        padding: 1rem 1.25rem;
+        border-radius: 0.75rem;
+        font-weight: 500;
+        color: #1e293b;
+        transition: all 0.2s ease;
+        cursor: pointer;
+        box-shadow: 0 1px 2px rgba(0,0,0,0.05);
+        min-width: 130px;
+        text-align: center;
+    }
+    .quick-action:hover {
+        background: #f1f5f9;
+        box-shadow: 0 2px 6px rgba(0,0,0,0.1);
+    }
+    </style>
+    """, unsafe_allow_html=True)
+
+    st.markdown('<div class="quick-actions">', unsafe_allow_html=True)
+    for action in actions:
+        st.markdown(f"""
+        <div class="quick-action" onclick="window.location.search='?page={action['target']}'">
+            {action['label']}
+        </div>
+        """, unsafe_allow_html=True)
+    st.markdown('</div>', unsafe_allow_html=True)
 
 
 def create_metric_card(label: str, value: str, delta: Optional[str] = None, icon: Optional[str] = None):
@@ -359,10 +488,10 @@ def create_job_card(job: Dict[str, Any], show_actions: bool = True, user_applied
     match_score = job.get('match_score', 0)
 
     # Clean and truncate description for preview
-    def strip_html(text):
-        return re.sub('<[^<]+?>', '', text or '')
-    preview = strip_html(raw_description)
+    preview = clean_html_text(raw_description or '')
     preview = preview.replace('\n', ' ').replace('\r', ' ')
+    # Remove any remaining HTML entities that might have been missed
+    preview = preview.replace('&amp;', '&').replace('&lt;', '<').replace('&gt;', '>').replace('&quot;', '"')
     preview = preview[:300] + ("..." if len(preview) > 300 else "")
 
     # Create tags
@@ -390,7 +519,7 @@ def create_job_card(job: Dict[str, Any], show_actions: bool = True, user_applied
             <div style="flex: 1;">
                 <div class="job-title">{title}</div>
                 <div class="job-company">{company}</div>
-                <div class="job-location">📍 {location}</div>
+                <div class="job-location"><i class="fas fa-map-marker-alt"></i> {location}</div>
                 {match_html}
             </div>
             <div style="text-align: right;">
@@ -407,9 +536,13 @@ def create_job_card(job: Dict[str, Any], show_actions: bool = True, user_applied
     st.markdown(card_html, unsafe_allow_html=True)
 
     # Details modal/expander for full description
-    with st.expander("🔎 View Full Description", expanded=False):
+    with st.expander("View Full Description", expanded=False):
         if raw_description:
-            st.markdown(raw_description, unsafe_allow_html=False)
+            # Clean the description for display
+            cleaned_description = clean_html_text(raw_description)
+            # Convert newlines to proper line breaks for better readability
+            cleaned_description = cleaned_description.replace('\n', '\n\n')
+            st.markdown(cleaned_description)
         else:
             st.info("No description provided.")
 
@@ -417,18 +550,18 @@ def create_job_card(job: Dict[str, Any], show_actions: bool = True, user_applied
     if show_actions:
         col1, col2, col3, col4 = st.columns([2, 2, 2, 1])
         with col1:
-            if st.button("📄 View Details", key=f"view_{job.get('id', hash(str(job)))}", use_container_width=True):
+            if st.button("View Details", key=f"view_{job.get('id', hash(str(job)))}", use_container_width=True):
                 return "view_details"
         with col2:
-            if st.button("🤖 AI Analysis", key=f"analyze_{job.get('id', hash(str(job)))}", use_container_width=True):
+            if st.button("AI Analysis", key=f"analyze_{job.get('id', hash(str(job)))}", use_container_width=True):
                 return "analyze"
         with col3:
-            apply_label = "✅ Applied" if user_applied else "📤 Apply"
+            apply_label = "Applied" if user_applied else "Apply"
             disabled = user_applied
             if st.button(apply_label, key=f"apply_{job.get('id', hash(str(job)))}", use_container_width=True, disabled=disabled):
                 return "apply"
         with col4:
-            if st.button("💾", key=f"save_{job.get('id', hash(str(job)))}", help="Save for later"):
+            if st.button("Save", key=f"save_{job.get('id', hash(str(job)))}", help="Save for later"):
                 return "save"
     return None
 
@@ -471,13 +604,13 @@ def create_progress_bar(current: int, total: int, label: str = "") -> None:
 def create_alert(message: str, alert_type: str = "info", dismissible: bool = False) -> None:
     """Create an alert message."""
     icons = {
-        'success': '✅',
-        'warning': '⚠️',
-        'error': '❌',
-        'info': 'ℹ️'
+        'success': '<i class="fas fa-check-circle"></i>',
+        'warning': '<i class="fas fa-exclamation-triangle"></i>',
+        'error': '<i class="fas fa-times-circle"></i>',
+        'info': '<i class="fas fa-info-circle"></i>'
     }
     
-    icon = icons.get(alert_type, 'ℹ️')
+    icon = icons.get(alert_type, '<i class="fas fa-info-circle"></i>')
     dismiss_btn = '<button style="float: right; background: none; border: none; font-size: 1.2rem; cursor: pointer;" onclick="this.parentElement.style.display=\'none\'">×</button>' if dismissible else ''
     
     st.markdown(f"""
@@ -623,7 +756,7 @@ def create_data_table(data: List[Dict[str, Any]], columns: List[str], sortable: 
     
     # Search functionality
     if searchable and not df.empty:
-        search_term = st.text_input("🔍 Search", placeholder="Search in table...")
+        search_term = st.text_input("Search", placeholder="Search in table...")
         if search_term:
             mask = df.astype(str).apply(lambda x: x.str.contains(search_term, case=False, na=False)).any(axis=1)
             df = df[mask]
@@ -689,7 +822,7 @@ def create_export_buttons(data: pd.DataFrame, filename_prefix: str = "export") -
     with col1:
         csv_data = data.to_csv(index=False)
         st.download_button(
-            label="📄 Download CSV",
+            label="Download CSV",
             data=csv_data,
             file_name=f"{filename_prefix}_{timestamp}.csv",
             mime="text/csv",
@@ -699,7 +832,7 @@ def create_export_buttons(data: pd.DataFrame, filename_prefix: str = "export") -
     with col2:
         excel_buffer = data.to_excel(index=False, engine='openpyxl')
         st.download_button(
-            label="📊 Download Excel", 
+            label="Download Excel", 
             data=excel_buffer,
             file_name=f"{filename_prefix}_{timestamp}.xlsx",
             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
@@ -709,7 +842,7 @@ def create_export_buttons(data: pd.DataFrame, filename_prefix: str = "export") -
     with col3:
         json_data = data.to_json(orient='records', indent=2)
         st.download_button(
-            label="⚙️ Download JSON",
+            label="Download JSON",
             data=json_data,
             file_name=f"{filename_prefix}_{timestamp}.json", 
             mime="application/json",
@@ -742,7 +875,7 @@ def create_loading_spinner(message: str = "Loading...") -> None:
     """, unsafe_allow_html=True)
 
 
-def create_empty_state(title: str, message: str, action_label: str = None, icon: str = "📭") -> str:
+def create_empty_state(title: str, message: str, action_label: str = None, icon: str = '<i class="fas fa-inbox"></i>') -> str:
     """Create an empty state with optional action."""
     action_html = ""
     if action_label:

@@ -28,9 +28,9 @@ from groq_resume_suggestion import generate_resume_suggestions_groq
 
 # Import UI components
 from ui.components import (
-    create_app_header, create_metric_card, create_job_card, create_status_badge,
+    create_app_header, create_quick_action_nav, create_metric_card, create_job_card, create_status_badge,
     create_progress_bar, create_alert, create_stats_chart, create_data_table,
-    create_export_buttons, create_loading_spinner, create_empty_state
+    create_export_buttons, create_loading_spinner, create_empty_state, clean_html_text
 )
 
 from utils.errors import handle_errors, ErrorContext
@@ -222,30 +222,13 @@ class DashboardPage:
         
         st.markdown("---")
         
-        # Quick Actions
-        st.markdown("### 🚀 Quick Actions")
-        
-        col1, col2, col3, col4 = st.columns(4)
-        
-        with col1:
-            if st.button("🔍 Search Jobs", use_container_width=True):
-                st.session_state.page = "Job Search"
-                st.rerun()
-        
-        with col2:
-            if st.button("📄 Upload Resume", use_container_width=True):
-                st.session_state.page = "Resume Manager"
-                st.rerun()
-        
-        with col3:
-            if st.button("🤖 AI Matching", use_container_width=True):
-                st.session_state.page = "AI Assistant"
-                st.rerun()
-        
-        with col4:
-            if st.button("📊 View Analytics", use_container_width=True):
-                st.session_state.page = "Analytics"
-                st.rerun()
+        # Quick Actions Navigation
+        create_quick_action_nav([
+            {"label": "Search Jobs", "target": "Job Search"},
+            {"label": "Upload Resume", "target": "Resume Manager"},
+            {"label": "AI Matching", "target": "AI Assistant"},
+            {"label": "View Analytics", "target": "Analytics"}
+        ])
         
         # Recent Applications
         st.markdown("### 📋 Recent Applications")
@@ -527,7 +510,13 @@ class JobSearchPage:
                             st.markdown(f"**Apply Link:** [{job.get('job_url')}]({job.get('job_url')})")
                         
                         st.markdown("**Description:**")
-                        st.markdown(job.get('description', 'No description available'))
+                        # Clean HTML from description
+                        raw_desc = job.get('description', 'No description available')
+                        if raw_desc and raw_desc != 'No description available':
+                            clean_desc = clean_html_text(raw_desc)
+                            st.markdown(clean_desc)
+                        else:
+                            st.markdown(raw_desc)
         
         elif hasattr(st.session_state, 'last_search'):
             create_empty_state(

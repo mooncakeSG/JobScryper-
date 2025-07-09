@@ -32,7 +32,7 @@ from ui.components import (
     create_job_card, create_status_badge, create_progress_bar,
     create_alert, create_stats_chart, create_data_table,
     create_export_buttons, create_loading_spinner, create_empty_state,
-    create_sidebar_profile, create_notification_toast
+    create_sidebar_profile, create_notification_toast, clean_html_text
 )
 
 # Import database components
@@ -554,6 +554,9 @@ def search_jobs(job_title, location, keywords, job_type, sources, max_results, u
                     for job in jobspy_jobs:
                         job['source'] = 'JobSpy'
                         job['search_relevance'] = calculate_relevance(job, job_title, keywords)
+                        # Clean HTML from job description at source
+                        if job.get('description'):
+                            job['description'] = clean_html_text(job['description'])
                     all_jobs.extend(jobspy_jobs)
                     
                 except Exception as e:
@@ -571,6 +574,9 @@ def search_jobs(job_title, location, keywords, job_type, sources, max_results, u
                     )
                     for job in alt_jobs:
                         job['search_relevance'] = calculate_relevance(job, job_title, keywords)
+                        # Clean HTML from job description at source
+                        if job.get('description'):
+                            job['description'] = clean_html_text(job['description'])
                     all_jobs.extend(alt_jobs)
                     
                 except Exception as e:
@@ -1083,7 +1089,9 @@ def show_application_details(app):
         # Job description
         if app.get('job_description'):
             st.markdown("**Job Description**")
-            st.text_area("", app['job_description'], height=200, disabled=True)
+            # Clean HTML from job description
+            cleaned_description = clean_html_text(app['job_description'])
+            st.text_area("", cleaned_description, height=200, disabled=True)
         
         # Notes section
         st.markdown("**Notes**")
