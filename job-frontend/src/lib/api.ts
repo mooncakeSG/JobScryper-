@@ -9,19 +9,17 @@ const api: AxiosInstance = axios.create({
   },
 });
 
-// Request interceptor
+// Add request interceptor to include JWT token
 api.interceptors.request.use(
   (config) => {
-    // Add auth token if available
-    const token = localStorage.getItem('token');
+    const token = typeof window !== 'undefined' ? localStorage.getItem('token') : null;
     if (token) {
-      config.headers.Authorization = `Bearer ${token}`;
+      config.headers = config.headers || {};
+      config.headers['Authorization'] = `Bearer ${token}`;
     }
     return config;
   },
-  (error) => {
-    return Promise.reject(error);
-  }
+  (error) => Promise.reject(error)
 );
 
 // Response interceptor
@@ -218,6 +216,18 @@ export const apiService = {
     const response = await api.get('/api/salary/analysis', {
       params: { job_title: jobTitle, location }
     });
+    return response.data;
+  },
+
+  // Save a job for a user
+  async saveJob(job: any, userId: string = 'demo'): Promise<any> {
+    const response = await api.post(`/api/saved-jobs?user_id=${userId}`, job);
+    return response.data;
+  },
+
+  // Fetch saved jobs for a user
+  async getSavedJobs(userId: string = 'demo'): Promise<any[]> {
+    const response = await api.get(`/api/saved-jobs?user_id=${userId}`);
     return response.data;
   },
 };

@@ -1,4 +1,4 @@
-from fastapi import FastAPI, File, UploadFile, HTTPException
+from fastapi import FastAPI, File, UploadFile, HTTPException, Body, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 import uvicorn
@@ -7,6 +7,9 @@ import sys
 from typing import List, Dict, Any
 import json
 from pathlib import Path
+from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
+from jose import JWTError, jwt
+from datetime import datetime, timedelta
 
 # Add the parent directory to the Python path to import existing modules
 sys.path.append(str(Path(__file__).parent.parent))
@@ -43,6 +46,38 @@ resume_parser = None
 job_spy_wrapper = None
 job_aggregator = None
 job_matcher = None
+
+# In-memory store for saved jobs (for demo purposes)
+saved_jobs_store = {}
+
+# Simple in-memory user store for demo
+users_store = {}
+SECRET_KEY = "demo_secret_key"  # In production, use a secure random key!
+ALGORITHM = "HS256"
+ACCESS_TOKEN_EXPIRE_MINUTES = 60
+
+def create_access_token(data: dict, expires_delta: timedelta = None):
+    to_encode = data.copy()
+    expire = datetime.utcnow() + (expires_delta or timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES))
+    to_encode.update({"exp": expire})
+    return jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
+
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/auth/login")
+
+def get_current_user(token: str = Depends(oauth2_scheme)):
+    credentials_exception = HTTPException(
+        status_code=401,
+        detail="Could not validate credentials",
+        headers={"WWW-Authenticate": "Bearer"},
+    )
+    try:
+        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        username: str = payload.get("sub")
+        if username is None or username not in users_store:
+            raise credentials_exception
+        return {"username": username}
+    except JWTError:
+        raise credentials_exception
 
 @app.on_event("startup")
 async def startup_event():
@@ -124,6 +159,25 @@ async def analyze_resume(file: UploadFile = File(...)):
         if os.path.exists(temp_path):
             os.remove(temp_path)
         raise HTTPException(status_code=500, detail=f"Failed to analyze resume: {str(e)}")
+
+@app.post("/api/auth/signup")
+async def signup(form: OAuth2PasswordRequestForm = Depends()):
+    if form.username in users_store:
+        raise HTTPException(status_code=400, detail="Username already registered")
+    users_store[form.username] = {"username": form.username, "password": form.password}
+    return {"message": "User registered successfully"}
+
+@app.post("/api/auth/login")
+async def login(form: OAuth2PasswordRequestForm = Depends()):
+    user = users_store.get(form.username)
+    if not user or user["password"] != form.password:
+        raise HTTPException(status_code=401, detail="Incorrect username or password")
+    access_token = create_access_token(data={"sub": form.username})
+    return {"access_token": access_token, "token_type": "bearer"}
+
+@app.get("/api/auth/me")
+async def get_me(current_user: dict = Depends(get_current_user)):
+    return current_user
 
 @app.get("/api/match")
 async def search_jobs(
@@ -285,6 +339,23 @@ async def get_analytics(user_id: str = "demo"):
         
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to fetch analytics: {str(e)}")
+
+@app.post("/api/saved-jobs")
+async def save_job(user_id: str = "demo", job: dict = Body(...)):
+    """Save a job for a user (in-memory demo)."""
+    if user_id not in saved_jobs_store:
+        saved_jobs_store[user_id] = []
+    # Avoid duplicates by job id/url
+    for saved in saved_jobs_store[user_id]:
+        if saved.get("id") == job.get("id") or saved.get("url") == job.get("url"):
+            return {"message": "Job already saved"}
+    saved_jobs_store[user_id].append(job)
+    return {"message": "Job saved successfully"}
+
+@app.get("/api/saved-jobs")
+async def get_saved_jobs(user_id: str = "demo"):
+    """Get saved jobs for a user (in-memory demo)."""
+    return saved_jobs_store.get(user_id, [])
 
 if __name__ == "__main__":
     uvicorn.run(app, host="0.0.0.0", port=8000, reload=True) 

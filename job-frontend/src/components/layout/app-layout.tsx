@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Sidebar, SidebarContent, SidebarProvider } from "@/components/ui/sidebar";
 import { 
@@ -15,6 +15,7 @@ import {
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils";
+import { useRouter } from "next/navigation";
 
 interface AppLayoutProps {
   children: React.ReactNode;
@@ -31,6 +32,18 @@ const navigation = [
 export function AppLayout({ children }: AppLayoutProps) {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const pathname = usePathname();
+  const [isLoggedIn, setIsLoggedIn] = useState(false);
+  const router = useRouter();
+
+  useEffect(() => {
+    setIsLoggedIn(!!localStorage.getItem("token"));
+  }, []);
+
+  const handleLogout = () => {
+    localStorage.removeItem("token");
+    setIsLoggedIn(false);
+    router.push("/login");
+  };
 
   return (
     <SidebarProvider>
@@ -50,9 +63,15 @@ export function AppLayout({ children }: AppLayoutProps) {
                 {process.env.NEXT_PUBLIC_APP_NAME}
               </h1>
             </div>
-            <Button variant="ghost" size="icon">
-              <User className="h-5 w-5" />
-            </Button>
+            {isLoggedIn ? (
+              <Button variant="ghost" size="icon" onClick={handleLogout} title="Logout">
+                <User className="h-5 w-5" />
+              </Button>
+            ) : (
+              <Button variant="ghost" size="icon" onClick={() => router.push("/login")} title="Login">
+                <User className="h-5 w-5" />
+              </Button>
+            )}
           </div>
         </div>
 
@@ -150,9 +169,15 @@ export function AppLayout({ children }: AppLayoutProps) {
                 </h2>
               </div>
               <div className="flex items-center space-x-4">
-                <Button variant="ghost" size="icon">
-                  <User className="h-5 w-5" />
-                </Button>
+                {isLoggedIn ? (
+                  <Button variant="ghost" size="icon" onClick={handleLogout} title="Logout">
+                    <User className="h-5 w-5" />
+                  </Button>
+                ) : (
+                  <Button variant="ghost" size="icon" onClick={() => router.push("/login")} title="Login">
+                    <User className="h-5 w-5" />
+                  </Button>
+                )}
               </div>
             </div>
 

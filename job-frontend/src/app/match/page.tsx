@@ -44,6 +44,7 @@ export default function MatchPage() {
   const [applyingId, setApplyingId] = useState<string | null>(null);
   const [savingId, setSavingId] = useState<string | null>(null);
   const [savedJobs, setSavedJobs] = useState<{ [id: string]: boolean }>({});
+  const [isLoggedIn, setIsLoggedIn] = useState(false);
 
   // Mock data for demonstration
   const mockJobs: JobMatch[] = [
@@ -104,6 +105,19 @@ export default function MatchPage() {
   useEffect(() => {
     // Initialize with mock data
     setJobs(mockJobs);
+  }, []);
+
+  useEffect(() => {
+    // Fetch saved jobs on mount
+    apiService.getSavedJobs('demo').then((saved) => {
+      const savedMap: { [id: string]: boolean } = {};
+      saved.forEach((job: any) => {
+        if (job.id) savedMap[job.id] = true;
+        else if (job.url) savedMap[job.url] = true;
+      });
+      setSavedJobs(savedMap);
+    });
+    setIsLoggedIn(!!localStorage.getItem("token"));
   }, []);
 
   const searchJobs = async () => {
@@ -177,12 +191,18 @@ export default function MatchPage() {
     }
   };
 
-  // Handle Save (local for now)
-  const handleSave = (job: any) => {
+  // Update handleSave to use backend
+  const handleSave = async (job: any) => {
     setSavingId(job.id);
-    setSavedJobs(prev => ({ ...prev, [job.id]: true }));
-    setToast("Job saved!");
-    setTimeout(() => setSavingId(null), 1000);
+    try {
+      await apiService.saveJob(job, 'demo');
+      setSavedJobs(prev => ({ ...prev, [job.id]: true }));
+      setToast("Job saved!");
+    } catch (err) {
+      setToast("Failed to save job.");
+    } finally {
+      setSavingId(null);
+    }
   };
 
   return (
@@ -339,37 +359,41 @@ export default function MatchPage() {
                     </div>
                     
                     <div className="flex space-x-2">
-                      <Button onClick={() => handleSave(job)} variant="outline" size="sm" disabled={!!savedJobs[job.id] || savingId === job.id}>
-                        {savedJobs[job.id] ? "Saved" : savingId === job.id ? "Saving..." : "Save"}
-                      </Button>
-                      <Button
-                        onClick={async () => {
-                          // Track application in backend
-                          try {
-                            await apiService.createApplication({
-                              job_title: job.title,
-                              company: job.company,
-                              location: job.location,
-                              job_description: job.description,
-                              job_url: job.url,
-                              source: job.source,
-                              job_type: job.jobType,
-                              match_score: job.matchScore,
-                            });
-                          } catch (err) {
-                            // Optionally show a toast or log error
-                          }
-                          // Open job URL in new tab
-                          if (job.url) {
-                            window.open(job.url, '_blank', 'noopener,noreferrer');
-                          }
-                        }}
-                        size="sm"
-                        disabled={!job.url}
-                      >
-                        <ExternalLink className="mr-1 h-4 w-4" />
-                        Apply
-                      </Button>
+                      {isLoggedIn ? (
+                        <>
+                          <Button onClick={() => handleSave(job)} variant="outline" size="sm" disabled={!!savedJobs[job.id] || savingId === job.id}>
+                            {savedJobs[job.id] ? "Saved" : savingId === job.id ? "Saving..." : "Save"}
+                          </Button>
+                          <Button
+                            onClick={async () => {
+                              try {
+                                await apiService.createApplication({
+                                  job_title: job.title,
+                                  company: job.company,
+                                  location: job.location,
+                                  job_description: job.description,
+                                  job_url: job.url,
+                                  source: job.source,
+                                  job_type: job.jobType,
+                                  match_score: job.matchScore,
+                                });
+                              } catch (err) {}
+                              if (job.url) {
+                                window.open(job.url, '_blank', 'noopener,noreferrer');
+                              }
+                            }}
+                            size="sm"
+                            disabled={!job.url}
+                          >
+                            <ExternalLink className="mr-1 h-4 w-4" />
+                            Apply
+                          </Button>
+                        </>
+                      ) : (
+                        <Button variant="outline" size="sm" onClick={() => window.location.href = '/login'}>
+                          Login to Save/Apply
+                        </Button>
+                      )}
                     </div>
                   </div>
                 </CardContent>
