@@ -18,7 +18,7 @@ from sqlalchemy.exc import IntegrityError, NoResultFound
 
 from .models import (
     User, UserPreferences, Resume, JobApplication, SearchHistory,
-    AIAnalysisCache, SystemSettings, ApplicationStatus, ResumeStatus
+    AIAnalysisCache, SystemSettings, SavedJob, ApplicationStatus, ResumeStatus
 )
 from .connection import get_database_manager, db_session_scope
 from utils.errors import DatabaseError, ValidationError

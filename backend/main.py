@@ -10,6 +10,8 @@ from pathlib import Path
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from jose import JWTError, jwt
 from datetime import datetime, timedelta
+import hashlib
+import secrets
 
 # Add the parent directory to the Python path to import existing modules
 sys.path.append(str(Path(__file__).parent.parent))
@@ -22,6 +24,7 @@ try:
     from matcher import JobResumeMatcher
     from database.utilities import DatabaseUtils
     from database.models import User, JobApplication, ApplicationStatus
+    from database import fetchall, fetchone, execute
 except ImportError as e:
     print(f"Warning: Could not import some modules: {e}")
     print("Some features may not work properly.")
@@ -47,14 +50,14 @@ job_spy_wrapper = None
 job_aggregator = None
 job_matcher = None
 
-# In-memory store for saved jobs (for demo purposes)
-saved_jobs_store = {}
-
-# Simple in-memory user store for demo
-users_store = {}
-SECRET_KEY = "demo_secret_key"  # In production, use a secure random key!
+# JWT Configuration
+SECRET_KEY = os.getenv("SECRET_KEY", "demo_secret_key_change_in_production")
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 60
+
+def hash_password(password: str) -> str:
+    """Hash a password using SHA-256"""
+    return hashlib.sha256(password.encode()).hexdigest()
 
 def create_access_token(data: dict, expires_delta: timedelta = None):
     to_encode = data.copy()
@@ -73,9 +76,15 @@ def get_current_user(token: str = Depends(oauth2_scheme)):
     try:
         payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
         username: str = payload.get("sub")
-        if username is None or username not in users_store:
+        if username is None:
             raise credentials_exception
-        return {"username": username}
+        
+        # Verify user exists in database
+        user = fetchone("SELECT id, username FROM users WHERE username = ?", (username,))
+        if not user:
+            raise credentials_exception
+        
+        return {"id": user[0], "username": user[1]}
     except JWTError:
         raise credentials_exception
 
@@ -198,31 +207,57 @@ async def analyze_resume(file: UploadFile = File(...)):
             "suggestions": suggestions,
             "strengths": strengths,
             "keywords": keywords,
-            "improvements": improvements
+            "improvements": improvements,
+            "sections": {
+                "skills": skills,
+                "technical_skills": tech_skills,
+                "experience": experience,
+                "education": education,
+                "summary": summary
+            }
         }
         
-        # Clean up temporary file
-        os.remove(temp_path)
         return analysis
+        
     except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Resume analysis failed: {str(e)}")
+    finally:
+        # Clean up temporary file
         if os.path.exists(temp_path):
             os.remove(temp_path)
-        raise HTTPException(status_code=500, detail=f"Failed to analyze resume: {str(e)}")
 
 @app.post("/api/auth/signup")
 async def signup(user_data: dict = Body(...)):
     """User registration endpoint"""
     username = user_data.get("username")
     password = user_data.get("password")
+    email = user_data.get("email", "")
     
     if not username or not password:
         raise HTTPException(status_code=400, detail="Username and password are required")
     
-    if username in users_store:
+    # If no email provided, use username@example.com as placeholder
+    if not email:
+        email = f"{username}@example.com"
+    
+    # Check if username already exists
+    existing_user = fetchone("SELECT id FROM users WHERE username = ?", (username,))
+    if existing_user:
         raise HTTPException(status_code=400, detail="Username already registered")
     
-    users_store[username] = {"username": username, "password": password}
-    return {"message": "User registered successfully"}
+    # Check if email already exists
+    existing_email = fetchone("SELECT id FROM users WHERE email = ?", (email,))
+    if existing_email:
+        raise HTTPException(status_code=400, detail="Email already registered")
+    
+    # Hash password and create user
+    hashed_password = hash_password(password)
+    user_id = execute(
+        "INSERT INTO users (username, password_hash, email, created_at) VALUES (?, ?, ?, ?)",
+        (username, hashed_password, email, datetime.now().isoformat())
+    )
+    
+    return {"message": "User registered successfully", "user_id": user_id}
 
 @app.post("/api/auth/login")
 async def login(user_data: dict = Body(...)):
@@ -233,12 +268,22 @@ async def login(user_data: dict = Body(...)):
     if not username or not password:
         raise HTTPException(status_code=400, detail="Username and password are required")
     
-    user = users_store.get(username)
-    if not user or user["password"] != password:
+    # Get user from database (try username first, then email)
+    user = fetchone("SELECT id, username, password_hash FROM users WHERE username = ?", (username,))
+    if not user:
+        # Try email if username not found
+        user = fetchone("SELECT id, username, password_hash FROM users WHERE email = ?", (username,))
+    
+    if not user:
         raise HTTPException(status_code=401, detail="Incorrect username or password")
     
-    access_token = create_access_token(data={"sub": username})
-    return {"access_token": access_token, "token_type": "bearer"}
+    # Verify password
+    hashed_password = hash_password(password)
+    if user[2] != hashed_password:
+        raise HTTPException(status_code=401, detail="Incorrect username or password")
+    
+    access_token = create_access_token(data={"sub": user[1]})  # Use actual username from DB
+    return {"access_token": access_token, "token_type": "bearer", "user_id": user[0]}
 
 @app.get("/api/auth/me")
 async def get_me(current_user: dict = Depends(get_current_user)):
@@ -322,11 +367,8 @@ async def search_jobs(
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Search failed: {str(e)}")
 
-app_id_counter = 1
-
 @app.post("/api/applications")
-async def create_application(application_data: Dict[str, Any]):
-    global app_id_counter
+async def create_application(application_data: Dict[str, Any], current_user: dict = Depends(get_current_user)):
     """Create a new job application"""
     try:
         # Validate required fields
@@ -335,34 +377,51 @@ async def create_application(application_data: Dict[str, Any]):
             if not application_data.get(field):
                 raise HTTPException(status_code=400, detail=f"Missing required field: {field}")
         
-        # Generate a unique ID
-        if "applications" not in saved_jobs_store:
-            saved_jobs_store["applications"] = []
-        existing_ids = {app["id"] for app in saved_jobs_store["applications"]}
-        while app_id_counter in existing_ids:
-            app_id_counter += 1
-        application = {
-            "id": app_id_counter,
-            "job_title": application_data.get("job_title"),
-            "company": application_data.get("company"),
-            "location": application_data.get("location", ""),
-            "status": application_data.get("status", "applied"),
-            "application_date": datetime.now().isoformat(),
-            "salary_min": application_data.get("salary_min"),
-            "salary_max": application_data.get("salary_max"),
-            "job_url": application_data.get("job_url"),
-            "interview_date": application_data.get("interview_date"),
-            "notes": application_data.get("notes"),
-            "match_score": application_data.get("match_score", 0)
+        # Insert application into database
+        application_id = execute("""
+            INSERT INTO job_applications (
+                user_id, job_title, company, location, status, application_date,
+                salary_min, salary_max, job_url, interview_date, notes, match_score
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """, (
+            current_user["id"],
+            application_data.get("job_title"),
+            application_data.get("company"),
+            application_data.get("location", ""),
+            application_data.get("status", "applied"),
+            datetime.now().isoformat(),
+            application_data.get("salary_min"),
+            application_data.get("salary_max"),
+            application_data.get("job_url"),
+            application_data.get("interview_date"),
+            application_data.get("notes"),
+            application_data.get("match_score", 0)
+        ))
+        
+        # Fetch the created application
+        application = fetchone("""
+            SELECT id, job_title, company, location, status, application_date,
+                   salary_min, salary_max, job_url, interview_date, notes, match_score
+            FROM job_applications WHERE id = ?
+        """, (application_id,))
+        
+        return {
+            "message": "Application created successfully",
+            "application": {
+                "id": application[0],
+                "job_title": application[1],
+                "company": application[2],
+                "location": application[3],
+                "status": application[4],
+                "application_date": application[5],
+                "salary_min": application[6],
+                "salary_max": application[7],
+                "job_url": application[8],
+                "interview_date": application[9],
+                "notes": application[10],
+                "match_score": application[11]
+            }
         }
-        app_id_counter += 1
-        
-        # Store in memory (replace with database in production)
-        if "applications" not in saved_jobs_store:
-            saved_jobs_store["applications"] = []
-        saved_jobs_store["applications"].append(application)
-        
-        return {"message": "Application created successfully", "application": application}
         
     except HTTPException:
         raise
@@ -371,7 +430,7 @@ async def create_application(application_data: Dict[str, Any]):
 
 @app.get("/api/applications")
 async def get_applications(
-    user_id: str = "demo",
+    current_user: dict = Depends(get_current_user),
     status: str = None,
     search: str = None,
     page: int = 1,
@@ -379,101 +438,54 @@ async def get_applications(
 ):
     """Get user's job applications with filtering and pagination"""
     try:
-        # Get applications from memory (replace with database in production)
-        applications = saved_jobs_store.get("applications", [])
-        
-        # Add mock data if empty
-        if not applications:
-            applications = [
-                {
-                    "id": 1,
-                    "job_title": "Senior Software Engineer",
-                    "company": "TechCorp",
-                    "location": "San Francisco, CA",
-                    "status": "interview_scheduled",
-                    "application_date": "2024-01-15T10:00:00",
-                    "salary_min": 120000,
-                    "salary_max": 180000,
-                    "job_url": "https://example.com/job1",
-                    "interview_date": "2024-01-25T14:00:00",
-                    "notes": "Phone interview scheduled with hiring manager",
-                    "match_score": 95
-                },
-                {
-                    "id": 2,
-                    "job_title": "Full Stack Developer",
-                    "company": "StartupXYZ",
-                    "location": "Remote",
-                    "status": "applied",
-                    "application_date": "2024-01-14T09:30:00",
-                    "salary_min": 90000,
-                    "salary_max": 130000,
-                    "job_url": "https://example.com/job2",
-                    "notes": "Applied via company website",
-                    "match_score": 88
-                },
-                {
-                    "id": 3,
-                    "job_title": "Frontend Engineer",
-                    "company": "BigTech Inc",
-                    "location": "New York, NY",
-                    "status": "rejected",
-                    "application_date": "2024-01-10T11:15:00",
-                    "salary_min": 110000,
-                    "salary_max": 160000,
-                    "notes": "Rejected after technical interview",
-                    "match_score": 92
-                },
-                {
-                    "id": 4,
-                    "job_title": "DevOps Engineer",
-                    "company": "CloudSolutions",
-                    "location": "Austin, TX",
-                    "status": "offer_received",
-                    "application_date": "2024-01-08T16:45:00",
-                    "salary_min": 100000,
-                    "salary_max": 140000,
-                    "notes": "Great offer! Considering acceptance",
-                    "match_score": 87
-                },
-                {
-                    "id": 5,
-                    "job_title": "Product Manager",
-                    "company": "Innovation Labs",
-                    "location": "Seattle, WA",
-                    "status": "pending",
-                    "application_date": "2024-01-12T13:20:00",
-                    "salary_min": 130000,
-                    "salary_max": 190000,
-                    "notes": "Application submitted, waiting for response",
-                    "match_score": 78
-                }
-            ]
-            saved_jobs_store["applications"] = applications
-        
-        # Apply filters
-        filtered_applications = applications
+        # Build query with filters
+        query = """
+            SELECT id, job_title, company, location, status, application_date,
+                   salary_min, salary_max, job_url, interview_date, notes, match_score
+            FROM job_applications WHERE user_id = ?
+        """
+        params = [current_user["id"]]
         
         if status and status != "all":
-            filtered_applications = [app for app in filtered_applications if app["status"] == status]
+            query += " AND status = ?"
+            params.append(status)
         
         if search:
-            search_lower = search.lower()
-            filtered_applications = [
-                app for app in filtered_applications 
-                if (search_lower in app["job_title"].lower() or 
-                    search_lower in app["company"].lower() or 
-                    search_lower in app.get("location", "").lower())
-            ]
+            query += " AND (job_title LIKE ? OR company LIKE ? OR location LIKE ?)"
+            search_param = f"%{search}%"
+            params.extend([search_param, search_param, search_param])
         
-        # Apply pagination
-        total_count = len(filtered_applications)
-        start_index = (page - 1) * limit
-        end_index = start_index + limit
-        paginated_applications = filtered_applications[start_index:end_index]
+        # Get total count for pagination
+        count_query = query.replace("SELECT id, job_title, company, location, status, application_date, salary_min, salary_max, job_url, interview_date, notes, match_score", "SELECT COUNT(*)")
+        total_count = fetchone(count_query, params)[0]
+        
+        # Add pagination
+        query += " ORDER BY application_date DESC LIMIT ? OFFSET ?"
+        params.extend([limit, (page - 1) * limit])
+        
+        # Execute query
+        applications_data = fetchall(query, params)
+        
+        # Format applications
+        applications = []
+        for app in applications_data:
+            applications.append({
+                "id": app[0],
+                "job_title": app[1],
+                "company": app[2],
+                "location": app[3],
+                "status": app[4],
+                "application_date": app[5],
+                "salary_min": app[6],
+                "salary_max": app[7],
+                "job_url": app[8],
+                "interview_date": app[9],
+                "notes": app[10],
+                "match_score": app[11]
+            })
         
         return {
-            "applications": paginated_applications,
+            "applications": applications,
             "pagination": {
                 "page": page,
                 "limit": limit,
@@ -486,22 +498,60 @@ async def get_applications(
         raise HTTPException(status_code=500, detail=f"Failed to fetch applications: {str(e)}")
 
 @app.patch("/api/applications/{application_id}")
-async def update_application(application_id: int, update_data: Dict[str, Any]):
+async def update_application(application_id: int, update_data: Dict[str, Any], current_user: dict = Depends(get_current_user)):
     """Update an existing job application"""
     try:
-        applications = saved_jobs_store.get("applications", [])
-        application = next((app for app in applications if app["id"] == application_id), None)
+        # Verify application belongs to user
+        application = fetchone("""
+            SELECT id FROM job_applications 
+            WHERE id = ? AND user_id = ?
+        """, (application_id, current_user["id"]))
         
         if not application:
             raise HTTPException(status_code=404, detail="Application not found")
         
-        # Update allowed fields
+        # Build update query
         allowed_fields = ["status", "notes", "interview_date", "salary_min", "salary_max"]
+        update_parts = []
+        params = []
+        
         for field in allowed_fields:
             if field in update_data:
-                application[field] = update_data[field]
+                update_parts.append(f"{field} = ?")
+                params.append(update_data[field])
         
-        return {"message": "Application updated successfully", "application": application}
+        if not update_parts:
+            raise HTTPException(status_code=400, detail="No valid fields to update")
+        
+        # Execute update
+        query = f"UPDATE job_applications SET {', '.join(update_parts)} WHERE id = ? AND user_id = ?"
+        params.extend([application_id, current_user["id"]])
+        execute(query, params)
+        
+        # Fetch updated application
+        updated_app = fetchone("""
+            SELECT id, job_title, company, location, status, application_date,
+                   salary_min, salary_max, job_url, interview_date, notes, match_score
+            FROM job_applications WHERE id = ?
+        """, (application_id,))
+        
+        return {
+            "message": "Application updated successfully",
+            "application": {
+                "id": updated_app[0],
+                "job_title": updated_app[1],
+                "company": updated_app[2],
+                "location": updated_app[3],
+                "status": updated_app[4],
+                "application_date": updated_app[5],
+                "salary_min": updated_app[6],
+                "salary_max": updated_app[7],
+                "job_url": updated_app[8],
+                "interview_date": updated_app[9],
+                "notes": updated_app[10],
+                "match_score": updated_app[11]
+            }
+        }
         
     except HTTPException:
         raise
@@ -509,17 +559,20 @@ async def update_application(application_id: int, update_data: Dict[str, Any]):
         raise HTTPException(status_code=500, detail=f"Failed to update application: {str(e)}")
 
 @app.delete("/api/applications/{application_id}")
-async def delete_application(application_id: int):
+async def delete_application(application_id: int, current_user: dict = Depends(get_current_user)):
     """Delete a job application"""
     try:
-        applications = saved_jobs_store.get("applications", [])
-        application = next((app for app in applications if app["id"] == application_id), None)
+        # Verify application belongs to user
+        application = fetchone("""
+            SELECT id FROM job_applications 
+            WHERE id = ? AND user_id = ?
+        """, (application_id, current_user["id"]))
         
         if not application:
             raise HTTPException(status_code=404, detail="Application not found")
         
-        applications.remove(application)
-        saved_jobs_store["applications"] = applications
+        # Delete application
+        execute("DELETE FROM job_applications WHERE id = ? AND user_id = ?", (application_id, current_user["id"]))
         
         return {"message": "Application deleted successfully"}
         
@@ -529,30 +582,68 @@ async def delete_application(application_id: int):
         raise HTTPException(status_code=500, detail=f"Failed to delete application: {str(e)}")
 
 @app.get("/api/analytics")
-async def get_analytics(user_id: str = "demo"):
+async def get_analytics(current_user: dict = Depends(get_current_user)):
     """Get user's analytics data"""
     try:
-        # Mock analytics data
+        # Get real analytics from database
+        total_applications = fetchone("""
+            SELECT COUNT(*) FROM job_applications WHERE user_id = ?
+        """, (current_user["id"],))[0]
+        
+        # Get status distribution
+        status_counts = fetchall("""
+            SELECT status, COUNT(*) as count 
+            FROM job_applications 
+            WHERE user_id = ? 
+            GROUP BY status
+        """, (current_user["id"],))
+        
+        # Get monthly applications (last 6 months)
+        monthly_data = fetchall("""
+            SELECT 
+                strftime('%Y-%m', application_date) as month,
+                COUNT(*) as applications,
+                SUM(CASE WHEN status IN ('interview_scheduled', 'interview_completed') THEN 1 ELSE 0 END) as interviews,
+                SUM(CASE WHEN status = 'offer_received' THEN 1 ELSE 0 END) as offers
+            FROM job_applications 
+            WHERE user_id = ? 
+            AND application_date >= date('now', '-6 months')
+            GROUP BY strftime('%Y-%m', application_date)
+            ORDER BY month DESC
+        """, (current_user["id"],))
+        
+        # Calculate rates
+        interview_count = sum(count for _, count in status_counts if _ in ['interview_scheduled', 'interview_completed'])
+        interview_rate = (interview_count / total_applications * 100) if total_applications > 0 else 0
+        
+        response_count = sum(count for _, count in status_counts if _ not in ['applied', 'pending'])
+        response_rate = (response_count / total_applications * 100) if total_applications > 0 else 0
+        
+        # Format monthly data
+        monthly_applications = []
+        for month, apps, interviews, offers in monthly_data:
+            monthly_applications.append({
+                "month": month,
+                "applications": apps,
+                "interviews": interviews,
+                "offers": offers
+            })
+        
+        # Format status data
+        application_status = []
+        for status, count in status_counts:
+            application_status.append({
+                "name": status.replace('_', ' ').title(),
+                "value": count
+            })
+        
         analytics = {
-            "total_applications": 150,
-            "interview_rate": 18.7,
-            "response_rate": 34.5,
-            "avg_response_time": 5.2,
-            "monthly_applications": [
-                {"month": "Jan", "applications": 12, "interviews": 2, "offers": 0},
-                {"month": "Feb", "applications": 18, "interviews": 3, "offers": 1},
-                {"month": "Mar", "applications": 25, "interviews": 4, "offers": 1},
-                {"month": "Apr", "applications": 32, "interviews": 6, "offers": 2},
-                {"month": "May", "applications": 28, "interviews": 5, "offers": 1},
-                {"month": "Jun", "applications": 35, "interviews": 7, "offers": 3}
-            ],
-            "application_status": [
-                {"name": "Applied", "value": 45},
-                {"name": "Under Review", "value": 25},
-                {"name": "Interview", "value": 15},
-                {"name": "Rejected", "value": 12},
-                {"name": "Offer", "value": 3}
-            ]
+            "total_applications": total_applications,
+            "interview_rate": round(interview_rate, 1),
+            "response_rate": round(response_rate, 1),
+            "avg_response_time": 5.2,  # Mock data for now
+            "monthly_applications": monthly_applications,
+            "application_status": application_status
         }
         
         return analytics
@@ -561,21 +652,53 @@ async def get_analytics(user_id: str = "demo"):
         raise HTTPException(status_code=500, detail=f"Failed to fetch analytics: {str(e)}")
 
 @app.post("/api/saved-jobs")
-async def save_job(user_id: str = "demo", job: dict = Body(...)):
-    """Save a job for a user (in-memory demo)."""
-    if user_id not in saved_jobs_store:
-        saved_jobs_store[user_id] = []
-    # Avoid duplicates by job id/url
-    for saved in saved_jobs_store[user_id]:
-        if saved.get("id") == job.get("id") or saved.get("url") == job.get("url"):
+async def save_job(job: dict = Body(...), current_user: dict = Depends(get_current_user)):
+    """Save a job for a user"""
+    try:
+        # Check if job already saved
+        existing = fetchone("""
+            SELECT id FROM saved_jobs 
+            WHERE user_id = ? AND (job_id = ? OR job_url = ?)
+        """, (current_user["id"], job.get("id"), job.get("url")))
+        
+        if existing:
             return {"message": "Job already saved"}
-    saved_jobs_store[user_id].append(job)
-    return {"message": "Job saved successfully"}
+        
+        # Save job
+        execute("""
+            INSERT INTO saved_jobs (user_id, job_id, job_url, job_data, saved_at)
+            VALUES (?, ?, ?, ?, ?)
+        """, (
+            current_user["id"],
+            job.get("id"),
+            job.get("url"),
+            json.dumps(job),
+            datetime.now().isoformat()
+        ))
+        
+        return {"message": "Job saved successfully"}
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to save job: {str(e)}")
 
 @app.get("/api/saved-jobs")
-async def get_saved_jobs(user_id: str = "demo"):
-    """Get saved jobs for a user (in-memory demo)."""
-    return saved_jobs_store.get(user_id, [])
+async def get_saved_jobs(current_user: dict = Depends(get_current_user)):
+    """Get saved jobs for a user"""
+    try:
+        saved_jobs_data = fetchall("""
+            SELECT job_data FROM saved_jobs 
+            WHERE user_id = ? 
+            ORDER BY saved_at DESC
+        """, (current_user["id"],))
+        
+        saved_jobs = []
+        for (job_data,) in saved_jobs_data:
+            saved_jobs.append(json.loads(job_data))
+        
+        return saved_jobs
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to fetch saved jobs: {str(e)}")
 
 if __name__ == "__main__":
     uvicorn.run(app, host="0.0.0.0", port=8000, reload=True) 

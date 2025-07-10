@@ -14,6 +14,7 @@ __pycache__/
 venv/
 ENV/
 env/
+production.env.example
 
 # Jupyter Notebook Checkpoints (if used)
 .ipynb_checkpoints/

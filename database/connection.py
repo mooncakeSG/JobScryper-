@@ -64,31 +64,31 @@ class DatabaseConfig:
             }
         
         elif self.environment == 'production':
-            # PostgreSQL for production
-            pg_config = {
-                'host': os.getenv('DATABASE_HOST', 'localhost'),
-                'port': os.getenv('DATABASE_PORT', '5432'),
-                'database': os.getenv('DATABASE_NAME', 'auto_applyer'),
-                'username': os.getenv('DATABASE_USER', 'postgres'),
-                'password': os.getenv('DATABASE_PASSWORD', ''),
+            # SQLite Cloud for production (sqlitecloud.io) - Direct connection approach
+            sqlite_cloud_config = {
+                'host': os.getenv('SQLITE_CLOUD_HOST', ''),
+                'port': os.getenv('SQLITE_CLOUD_PORT', '8860'),
+                'database': os.getenv('SQLITE_CLOUD_DATABASE', 'auto_applyer'),
+                'api_key': os.getenv('SQLITE_CLOUD_API_KEY', ''),
             }
             
-            # Validate required production config
-            if not all([pg_config['database'], pg_config['username'], pg_config['password']]):
+            # Validate required SQLite Cloud config
+            if not all([sqlite_cloud_config['host'], sqlite_cloud_config['api_key']]):
                 raise ConfigurationError(
-                    "Production database requires DATABASE_NAME, DATABASE_USER, and DATABASE_PASSWORD environment variables"
+                    "Production SQLite Cloud requires SQLITE_CLOUD_HOST and SQLITE_CLOUD_API_KEY environment variables"
                 )
             
+            # SQLite Cloud connection URL format: sqlitecloud://host:port/database?apikey=key
             database_url = (
-                f"postgresql://{pg_config['username']}:{pg_config['password']}"
-                f"@{pg_config['host']}:{pg_config['port']}/{pg_config['database']}"
+                f"sqlitecloud://{sqlite_cloud_config['host']}:{sqlite_cloud_config['port']}"
+                f"/{sqlite_cloud_config['database']}?apikey={sqlite_cloud_config['api_key']}"
             )
             
             return {
                 'database_url': database_url,
                 'echo': False,
-                'pool_size': int(os.getenv('DATABASE_POOL_SIZE', '5')),
-                'max_overflow': int(os.getenv('DATABASE_MAX_OVERFLOW', '10')),
+                'pool_size': int(os.getenv('DATABASE_POOL_SIZE', '10')),
+                'max_overflow': int(os.getenv('DATABASE_MAX_OVERFLOW', '20')),
                 'pool_pre_ping': True,
                 'pool_recycle': int(os.getenv('DATABASE_POOL_RECYCLE', '3600')),
                 'connect_args': {
@@ -297,10 +297,18 @@ class DatabaseManager:
                     ))
                     db_size = size_result.scalar()
                 
+                # Determine database type
+                if self.config.config['database_url'].startswith('sqlite+sqlitecloud'):
+                    database_type = "sqlite_cloud"
+                elif self.config.config['database_url'].startswith('sqlite'):
+                    database_type = "sqlite"
+                else:
+                    database_type = "postgresql"
+                
                 return {
                     "status": "connected",
                     "environment": self.config.environment,
-                    "database_type": "sqlite" if self.config.config['database_url'].startswith('sqlite') else "postgresql",
+                    "database_type": database_type,
                     "tables": tables,
                     "table_count": len(tables),
                     "database_size": db_size,

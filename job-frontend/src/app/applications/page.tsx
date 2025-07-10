@@ -7,7 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
 import { JobCardSkeletonList } from "@/components/ui/job-card-skeleton";
-import { useToast } from "@/hooks/use-toast";
+import { useToastWithVariants } from "@/hooks/use-toast";
 import { 
   Search, 
   Filter, 
@@ -24,7 +24,8 @@ import {
   Edit,
   Trash2,
   FileText,
-  TrendingUp
+  TrendingUp,
+  Loader2
 } from "lucide-react";
 import {
   Select,
@@ -34,6 +35,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogClose } from "@/components/ui/dialog";
+import { FadeIn } from "@/components/ui/animation";
 
 interface JobApplication {
   id: number;
@@ -47,6 +49,17 @@ interface JobApplication {
   job_url?: string;
   interview_date?: string;
   notes?: string;
+}
+
+interface FormErrors {
+  job_title?: string;
+  company?: string;
+  location?: string;
+  application_date?: string;
+  salary_min?: string;
+  salary_max?: string;
+  job_url?: string;
+  interview_date?: string;
 }
 
 const statusColors = {
@@ -85,7 +98,7 @@ export default function ApplicationsPage() {
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
   const [sortBy, setSortBy] = useState("application_date");
-  const { toast } = useToast();
+  const { success, error, info } = useToastWithVariants();
   const [showAddModal, setShowAddModal] = useState(false);
   const [newApp, setNewApp] = useState({
     job_title: "",
@@ -99,10 +112,54 @@ export default function ApplicationsPage() {
     interview_date: "",
     notes: ""
   });
+  const [addErrors, setAddErrors] = useState<FormErrors>({});
   const [adding, setAdding] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
   const [editApp, setEditApp] = useState<JobApplication | null>(null);
+  const [editErrors, setEditErrors] = useState<FormErrors>({});
   const [editing, setEditing] = useState(false);
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [deleteApp, setDeleteApp] = useState<JobApplication | null>(null);
+  const [deleting, setDeleting] = useState(false);
+  const [showStatusModal, setShowStatusModal] = useState(false);
+  const [statusApp, setStatusApp] = useState<{id: number, currentStatus: string, newStatus: string} | null>(null);
+  const [updatingStatus, setUpdatingStatus] = useState(false);
+
+  // Validation functions
+  const validateForm = (data: any): FormErrors => {
+    const errors: FormErrors = {};
+    
+    if (!data.job_title?.trim()) {
+      errors.job_title = "Job title is required";
+    }
+    
+    if (!data.company?.trim()) {
+      errors.company = "Company is required";
+    }
+    
+    if (data.job_url && !isValidUrl(data.job_url)) {
+      errors.job_url = "Please enter a valid URL";
+    }
+    
+    if (data.salary_min && data.salary_max && Number(data.salary_min) > Number(data.salary_max)) {
+      errors.salary_max = "Maximum salary must be greater than minimum salary";
+    }
+    
+    if (data.interview_date && data.application_date && new Date(data.interview_date) < new Date(data.application_date)) {
+      errors.interview_date = "Interview date cannot be before application date";
+    }
+    
+    return errors;
+  };
+
+  const isValidUrl = (url: string): boolean => {
+    try {
+      new URL(url);
+      return true;
+    } catch {
+      return false;
+    }
+  };
 
   useEffect(() => {
     fetchApplications();
@@ -119,28 +176,25 @@ export default function ApplicationsPage() {
       if (response.ok) {
         const data = await response.json();
         setApplications(data.applications || []);
-        toast({
-          title: "Applications loaded",
-          description: `Successfully loaded ${data.applications?.length || 0} applications`,
-          variant: "success",
-        });
+        success(
+          "Applications loaded",
+          `Successfully loaded ${data.applications?.length || 0} applications`
+        );
       } else {
         console.error('Failed to fetch applications');
-        toast({
-          title: "Error",
-          description: "Failed to load applications. Using demo data.",
-          variant: "destructive",
-        });
+        error(
+          "Error",
+          "Failed to load applications. Using demo data."
+        );
         // For demo purposes, use mock data
         setApplications(mockApplications);
       }
-    } catch (error) {
-      console.error('Error fetching applications:', error);
-      toast({
-        title: "Network Error",
-        description: "Unable to connect to server. Using demo data.",
-        variant: "destructive",
-      });
+    } catch (err) {
+      console.error('Error fetching applications:', err);
+      error(
+        "Network Error",
+        "Unable to connect to server. Using demo data."
+      );
       // For demo purposes, use mock data
       setApplications(mockApplications);
     } finally {
@@ -200,64 +254,128 @@ export default function ApplicationsPage() {
               : app
           )
         );
-        toast({
-          title: "Status Updated",
-          description: `Application status updated to ${newStatus.replace('_', ' ')}`,
-          variant: "success",
-        });
+        success(
+          "Status Updated",
+          `Application status updated to ${newStatus.replace('_', ' ')}`
+        );
       } else {
-        toast({
-          title: "Update Failed",
-          description: "Failed to update application status",
-          variant: "destructive",
-        });
+        error(
+          "Update Failed",
+          "Failed to update application status"
+        );
       }
-    } catch (error) {
-      console.error('Error updating application status:', error);
-      toast({
-        title: "Network Error",
-        description: "Unable to update application status",
-        variant: "destructive",
-      });
+    } catch (err) {
+      console.error('Error updating application status:', err instanceof Error ? err.message : err);
+      error(
+        "Network Error",
+        "Unable to update application status"
+      );
     }
   };
 
-  const deleteApplication = async (applicationId: number) => {
+  const openDeleteModal = (app: JobApplication) => {
+    setDeleteApp(app);
+    setShowDeleteModal(true);
+  };
+
+  const handleDeleteApplication = async () => {
+    if (!deleteApp) return;
+    setDeleting(true);
     try {
-      const response = await fetch(`/api/applications/${applicationId}`, {
+      const response = await fetch(`/api/applications/${deleteApp.id}`, {
         method: 'DELETE',
       });
       if (response.ok) {
-        setApplications(prev => prev.filter(app => app.id !== applicationId));
-        toast({
-          title: "Deleted",
-          description: "Application deleted successfully",
-          variant: "success",
-        });
+        setApplications(prev => prev.filter(app => app.id !== deleteApp.id));
+        success(
+          "Deleted",
+          "Application deleted successfully"
+        );
+        setShowDeleteModal(false);
+        setDeleteApp(null);
       } else {
-        toast({
-          title: "Delete Failed",
-          description: "Failed to delete application",
-          variant: "destructive",
-        });
+        error(
+          "Delete Failed",
+          "Failed to delete application"
+        );
       }
-    } catch (error) {
-      toast({
-        title: "Network Error",
-        description: "Unable to delete application",
-        variant: "destructive",
+    } catch (err) {
+      console.error('Error deleting application:', err instanceof Error ? err.message : err);
+      error(
+        "Network Error",
+        "Unable to delete application"
+      );
+    } finally {
+      setDeleting(false);
+    }
+  };
+
+  const openStatusModal = (app: JobApplication, newStatus: string) => {
+    setStatusApp({ id: app.id, currentStatus: app.status, newStatus });
+    setShowStatusModal(true);
+  };
+
+  const handleStatusUpdate = async () => {
+    if (!statusApp) return;
+    setUpdatingStatus(true);
+    try {
+      const response = await fetch(`/api/applications/${statusApp.id}`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ status: statusApp.newStatus }),
       });
+
+      if (response.ok) {
+        setApplications(prev => 
+          prev.map(app => 
+            app.id === statusApp.id 
+              ? { ...app, status: statusApp.newStatus }
+              : app
+          )
+        );
+        success(
+          "Status Updated",
+          `Application status updated to ${statusApp.newStatus.replace('_', ' ')}`
+        );
+        setShowStatusModal(false);
+        setStatusApp(null);
+      } else {
+        error(
+          "Update Failed",
+          "Failed to update application status"
+        );
+      }
+    } catch (err) {
+      console.error('Error updating application status:', err instanceof Error ? err.message : err);
+      error(
+        "Network Error",
+        "Unable to update application status"
+      );
+    } finally {
+      setUpdatingStatus(false);
     }
   };
 
   const handleAddChange = (e: any) => {
     const { name, value } = e.target;
     setNewApp(prev => ({ ...prev, [name]: value }));
+    setAddErrors(prev => ({ ...prev, [name]: undefined }));
   };
 
   const handleAddApplication = async (e: any) => {
     e.preventDefault();
+    
+    // Validate form
+    const validationErrors = validateForm(newApp);
+    if (Object.keys(validationErrors).length > 0) {
+      setAddErrors(validationErrors);
+      return;
+    }
+    
     setAdding(true);
+    setAddErrors({}); // Clear previous errors
     try {
       const response = await fetch('/api/applications', {
         method: 'POST',
@@ -271,7 +389,7 @@ export default function ApplicationsPage() {
       if (response.ok) {
         const data = await response.json();
         setApplications(prev => [data.application, ...prev]);
-        toast({ title: "Application Added", description: "New application added successfully", variant: "success" });
+        success("Application Added", "New application added successfully");
         setShowAddModal(false);
         setNewApp({
           job_title: "",
@@ -286,10 +404,16 @@ export default function ApplicationsPage() {
           notes: ""
         });
       } else {
-        toast({ title: "Add Failed", description: "Failed to add application", variant: "destructive" });
+        const errorData = await response.json().catch(() => ({}));
+        if (errorData.errors) {
+          setAddErrors(errorData.errors);
+        } else {
+          error("Add Failed", "Failed to add application");
+        }
       }
-    } catch (error) {
-      toast({ title: "Network Error", description: "Unable to add application", variant: "destructive" });
+    } catch (err) {
+      console.error('Error adding application:', err instanceof Error ? err.message : err);
+      error("Network Error", "Unable to add application");
     } finally {
       setAdding(false);
     }
@@ -298,11 +422,13 @@ export default function ApplicationsPage() {
   const openEditModal = (app: JobApplication) => {
     setEditApp({ ...app });
     setShowEditModal(true);
+    setEditErrors({}); // Clear previous errors
   };
 
   const handleEditChange = (e: any) => {
     const { name, value } = e.target;
     setEditApp(prev => prev ? { ...prev, [name]: value } : null);
+    setEditErrors(prev => ({ ...prev, [name]: undefined }));
   };
 
   const handleEditStatusChange = (val: string) => {
@@ -312,7 +438,16 @@ export default function ApplicationsPage() {
   const handleEditApplication = async (e: any) => {
     e.preventDefault();
     if (!editApp) return;
+    
+    // Validate form
+    const validationErrors = validateForm(editApp);
+    if (Object.keys(validationErrors).length > 0) {
+      setEditErrors(validationErrors);
+      return;
+    }
+    
     setEditing(true);
+    setEditErrors({}); // Clear previous errors
     try {
       const response = await fetch(`/api/applications/${editApp.id}`, {
         method: 'PATCH',
@@ -333,14 +468,24 @@ export default function ApplicationsPage() {
       if (response.ok) {
         const data = await response.json();
         setApplications(prev => prev.map(app => app.id === editApp.id ? data.application : app));
-        toast({ title: "Application Updated", description: "Application updated successfully", variant: "success" });
+        success("Application Updated", "Application updated successfully");
         setShowEditModal(false);
         setEditApp(null);
       } else {
-        toast({ title: "Update Failed", description: "Failed to update application", variant: "destructive" });
+        const errorData = await response.json().catch(() => ({}));
+        if (errorData.errors) {
+          setEditErrors(errorData.errors);
+        } else {
+          error("Update Failed", "Failed to update application");
+        }
       }
-    } catch (error) {
-      toast({ title: "Network Error", description: "Unable to update application", variant: "destructive" });
+    } catch (err: unknown) {
+      if (err instanceof Error) {
+        console.error('Error updating application:', err.message);
+      } else {
+        console.error('Error updating application:', err);
+      }
+      error("Network Error", "Unable to update application");
     } finally {
       setEditing(false);
     }
@@ -400,6 +545,7 @@ export default function ApplicationsPage() {
   }
 
   return (
+    <FadeIn>
     <div className="space-y-6">
       {/* Header */}
       <div className="bg-white rounded-xl shadow-sm px-8 py-8 mb-8 flex flex-col md:flex-row md:items-center md:justify-between border-b border-gray-100">
@@ -422,7 +568,7 @@ export default function ApplicationsPage() {
               <p className="text-3xl font-bold text-gray-900">{applications.length}</p>
             </div>
             <div className="h-12 w-12 bg-blue-50 rounded-xl flex items-center justify-center">
-              <FileText className="h-6 w-6 text-blue-600" />
+              <FileText className="h-6 w-6 text-blue-600" aria-hidden="true" />
             </div>
           </CardContent>
         </Card>
@@ -438,7 +584,7 @@ export default function ApplicationsPage() {
               </p>
             </div>
             <div className="h-12 w-12 bg-green-50 rounded-xl flex items-center justify-center">
-              <Clock className="h-6 w-6 text-green-600" />
+              <Clock className="h-6 w-6 text-green-600" aria-hidden="true" />
             </div>
           </CardContent>
         </Card>
@@ -454,7 +600,7 @@ export default function ApplicationsPage() {
               </p>
             </div>
             <div className="h-12 w-12 bg-purple-50 rounded-xl flex items-center justify-center">
-              <Calendar className="h-6 w-6 text-purple-600" />
+              <Calendar className="h-6 w-6 text-purple-600" aria-hidden="true" />
             </div>
           </CardContent>
         </Card>
@@ -470,7 +616,7 @@ export default function ApplicationsPage() {
               </p>
             </div>
             <div className="h-12 w-12 bg-orange-50 rounded-xl flex items-center justify-center">
-              <TrendingUp className="h-6 w-6 text-orange-600" />
+              <TrendingUp className="h-6 w-6 text-orange-600" aria-hidden="true" />
             </div>
           </CardContent>
         </Card>
@@ -483,7 +629,7 @@ export default function ApplicationsPage() {
             <div className="space-y-2">
               <Label htmlFor="search">Search</Label>
               <div className="relative">
-                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
+                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" aria-hidden="true" />
                 <Input
                   id="search"
                   placeholder="Search jobs, companies..."
@@ -562,7 +708,8 @@ export default function ApplicationsPage() {
           filteredApplications.map((application, idx) => (
             <Card
               key={`${application.id}-${application.job_title}-${idx}`}
-              className="rounded-2xl shadow-sm border border-gray-100 bg-white transition-all hover:shadow-lg group"
+              className="rounded-2xl shadow-sm border border-gray-100 bg-white transition-all hover:shadow-lg group focus-within:shadow-lg focus-within:ring-2 focus-within:ring-ring focus-within:ring-offset-2"
+              tabIndex={0}
             >
               <CardContent className="p-6">
                 <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
@@ -572,18 +719,18 @@ export default function ApplicationsPage() {
                         <h3 className="text-xl font-bold text-gray-900 truncate mb-1">{application.job_title}</h3>
                         <div className="flex flex-wrap items-center gap-4 text-sm text-gray-600 mb-1">
                           <div className="flex items-center gap-1">
-                            <Building className="h-4 w-4" />
+                            <Building className="h-4 w-4" aria-hidden="true" />
                             <span className="truncate max-w-[120px]">{application.company}</span>
                           </div>
                           {application.location && (
                             <div className="flex items-center gap-1">
-                              <MapPin className="h-4 w-4" />
+                              <MapPin className="h-4 w-4" aria-hidden="true" />
                               <span className="truncate max-w-[100px]">{application.location}</span>
                             </div>
                           )}
                           {(application.salary_min || application.salary_max) && (
                             <div className="flex items-center gap-1">
-                              <DollarSign className="h-4 w-4" />
+                              <DollarSign className="h-4 w-4" aria-hidden="true" />
                               {formatSalary(application.salary_min, application.salary_max)}
                             </div>
                           )}
@@ -599,12 +746,12 @@ export default function ApplicationsPage() {
                     </div>
                     <div className="flex flex-wrap items-center gap-4 text-xs text-gray-500 mt-2">
                       <div className="flex items-center gap-1">
-                        <Calendar className="h-4 w-4" />
+                        <Calendar className="h-4 w-4" aria-hidden="true" />
                         Applied: {formatDate(application.application_date)}
                       </div>
                       {application.interview_date && (
                         <div className="flex items-center gap-1">
-                          <Clock className="h-4 w-4" />
+                          <Clock className="h-4 w-4" aria-hidden="true" />
                           Interview: {formatDate(application.interview_date)}
                         </div>
                       )}
@@ -632,7 +779,7 @@ export default function ApplicationsPage() {
                     )}
                     <Select
                       value={application.status}
-                      onValueChange={(value) => updateApplicationStatus(application.id, value)}
+                        onValueChange={(value) => openStatusModal(application, value)}
                     >
                       <SelectTrigger className="w-32">
                         <SelectValue />
@@ -658,11 +805,7 @@ export default function ApplicationsPage() {
                     <Button
                       variant="ghost"
                       size="icon"
-                      onClick={() => {
-                        if (confirm('Are you sure you want to delete this application?')) {
-                          deleteApplication(application.id);
-                        }
-                      }}
+                        onClick={() => openDeleteModal(application)}
                       title="Delete Application"
                       aria-label="Delete Application"
                       className="hover:bg-red-50"
@@ -686,15 +829,59 @@ export default function ApplicationsPage() {
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
                 <Label htmlFor="job_title">Job Title</Label>
-                <Input id="job_title" name="job_title" value={newApp.job_title} onChange={handleAddChange} required />
+                  <Input 
+                    id="job_title" 
+                    name="job_title" 
+                    value={newApp.job_title} 
+                    onChange={handleAddChange} 
+                    required 
+                    className={addErrors.job_title ? "border-red-500 focus:ring-red-500 focus:border-red-500" : ""}
+                    aria-invalid={!!addErrors.job_title}
+                    aria-describedby={addErrors.job_title ? "job_title-error" : undefined}
+                  />
+                  {addErrors.job_title && (
+                    <p id="job_title-error" className="text-sm text-red-500 flex items-center gap-1 mt-1">
+                      <AlertCircle className="h-4 w-4" />
+                      {addErrors.job_title}
+                    </p>
+                  )}
               </div>
               <div>
                 <Label htmlFor="company">Company</Label>
-                <Input id="company" name="company" value={newApp.company} onChange={handleAddChange} required />
+                  <Input 
+                    id="company" 
+                    name="company" 
+                    value={newApp.company} 
+                    onChange={handleAddChange} 
+                    required 
+                    className={addErrors.company ? "border-red-500 focus:ring-red-500 focus:border-red-500" : ""}
+                    aria-invalid={!!addErrors.company}
+                    aria-describedby={addErrors.company ? "company-error" : undefined}
+                  />
+                  {addErrors.company && (
+                    <p id="company-error" className="text-sm text-red-500 flex items-center gap-1 mt-1">
+                      <AlertCircle className="h-4 w-4" />
+                      {addErrors.company}
+                    </p>
+                  )}
               </div>
               <div>
                 <Label htmlFor="location">Location</Label>
-                <Input id="location" name="location" value={newApp.location} onChange={handleAddChange} />
+                  <Input 
+                    id="location" 
+                    name="location" 
+                    value={newApp.location} 
+                    onChange={handleAddChange}
+                    className={addErrors.location ? "border-red-500 focus:ring-red-500 focus:border-red-500" : ""}
+                    aria-invalid={!!addErrors.location}
+                    aria-describedby={addErrors.location ? "location-error" : undefined}
+                  />
+                  {addErrors.location && (
+                    <p id="location-error" className="text-sm text-red-500 flex items-center gap-1 mt-1">
+                      <AlertCircle className="h-4 w-4" />
+                      {addErrors.location}
+                    </p>
+                  )}
               </div>
               <div>
                 <Label htmlFor="status">Status</Label>
@@ -712,22 +899,27 @@ export default function ApplicationsPage() {
               <div>
                 <Label htmlFor="application_date">Application Date</Label>
                 <Input id="application_date" name="application_date" type="date" value={newApp.application_date} onChange={handleAddChange} />
+                  {addErrors.application_date && <p className="text-sm text-red-500">{addErrors.application_date}</p>}
               </div>
               <div>
                 <Label htmlFor="salary_min">Salary Min</Label>
                 <Input id="salary_min" name="salary_min" type="number" value={newApp.salary_min} onChange={handleAddChange} />
+                  {addErrors.salary_min && <p className="text-sm text-red-500">{addErrors.salary_min}</p>}
               </div>
               <div>
                 <Label htmlFor="salary_max">Salary Max</Label>
                 <Input id="salary_max" name="salary_max" type="number" value={newApp.salary_max} onChange={handleAddChange} />
+                  {addErrors.salary_max && <p className="text-sm text-red-500">{addErrors.salary_max}</p>}
               </div>
               <div>
                 <Label htmlFor="job_url">Job URL</Label>
                 <Input id="job_url" name="job_url" value={newApp.job_url} onChange={handleAddChange} />
+                  {addErrors.job_url && <p className="text-sm text-red-500">{addErrors.job_url}</p>}
               </div>
               <div>
                 <Label htmlFor="interview_date">Interview Date</Label>
                 <Input id="interview_date" name="interview_date" type="date" value={newApp.interview_date} onChange={handleAddChange} />
+                  {addErrors.interview_date && <p className="text-sm text-red-500">{addErrors.interview_date}</p>}
               </div>
               <div className="md:col-span-2">
                 <Label htmlFor="notes">Notes</Label>
@@ -735,7 +927,19 @@ export default function ApplicationsPage() {
               </div>
             </div>
             <DialogFooter>
-              <Button type="submit" disabled={adding}>{adding ? "Adding..." : "Add Application"}</Button>
+                <Button 
+                  type="submit" 
+                  disabled={adding || Object.keys(addErrors).length > 0}
+                >
+                  {adding ? (
+                    <span className="flex items-center">
+                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                      Adding...
+                    </span>
+                  ) : (
+                    "Add Application"
+                  )}
+                </Button>
               <DialogClose asChild>
                 <Button type="button" variant="outline">Cancel</Button>
               </DialogClose>
@@ -755,14 +959,17 @@ export default function ApplicationsPage() {
                 <div>
                   <Label htmlFor="edit_job_title">Job Title</Label>
                   <Input id="edit_job_title" name="job_title" value={editApp.job_title} onChange={handleEditChange} required />
+                    {editErrors.job_title && <p className="text-sm text-red-500">{editErrors.job_title}</p>}
                 </div>
                 <div>
                   <Label htmlFor="edit_company">Company</Label>
                   <Input id="edit_company" name="company" value={editApp.company} onChange={handleEditChange} required />
+                    {editErrors.company && <p className="text-sm text-red-500">{editErrors.company}</p>}
                 </div>
                 <div>
                   <Label htmlFor="edit_location">Location</Label>
                   <Input id="edit_location" name="location" value={editApp.location} onChange={handleEditChange} />
+                    {editErrors.location && <p className="text-sm text-red-500">{editErrors.location}</p>}
                 </div>
                 <div>
                   <Label htmlFor="edit_status">Status</Label>
@@ -780,22 +987,27 @@ export default function ApplicationsPage() {
                 <div>
                   <Label htmlFor="edit_application_date">Application Date</Label>
                   <Input id="edit_application_date" name="application_date" type="date" value={editApp.application_date} onChange={handleEditChange} />
+                    {editErrors.application_date && <p className="text-sm text-red-500">{editErrors.application_date}</p>}
                 </div>
                 <div>
                   <Label htmlFor="edit_salary_min">Salary Min</Label>
                   <Input id="edit_salary_min" name="salary_min" type="number" value={editApp.salary_min ?? ""} onChange={handleEditChange} />
+                    {editErrors.salary_min && <p className="text-sm text-red-500">{editErrors.salary_min}</p>}
                 </div>
                 <div>
                   <Label htmlFor="edit_salary_max">Salary Max</Label>
                   <Input id="edit_salary_max" name="salary_max" type="number" value={editApp.salary_max ?? ""} onChange={handleEditChange} />
+                    {editErrors.salary_max && <p className="text-sm text-red-500">{editErrors.salary_max}</p>}
                 </div>
                 <div>
                   <Label htmlFor="edit_job_url">Job URL</Label>
                   <Input id="edit_job_url" name="job_url" value={editApp.job_url ?? ""} onChange={handleEditChange} />
+                    {editErrors.job_url && <p className="text-sm text-red-500">{editErrors.job_url}</p>}
                 </div>
                 <div>
                   <Label htmlFor="edit_interview_date">Interview Date</Label>
                   <Input id="edit_interview_date" name="interview_date" type="date" value={editApp.interview_date ?? ""} onChange={handleEditChange} />
+                    {editErrors.interview_date && <p className="text-sm text-red-500">{editErrors.interview_date}</p>}
                 </div>
                 <div className="md:col-span-2">
                   <Label htmlFor="edit_notes">Notes</Label>
@@ -803,7 +1015,19 @@ export default function ApplicationsPage() {
                 </div>
               </div>
               <DialogFooter>
-                <Button type="submit" disabled={editing}>{editing ? "Saving..." : "Save Changes"}</Button>
+                  <Button 
+                    type="submit" 
+                    disabled={editing || Object.keys(editErrors).length > 0}
+                  >
+                    {editing ? (
+                      <span className="flex items-center">
+                        <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                        Saving...
+                      </span>
+                    ) : (
+                      "Save Changes"
+                    )}
+                  </Button>
                 <DialogClose asChild>
                   <Button type="button" variant="outline">Cancel</Button>
                 </DialogClose>
@@ -812,7 +1036,76 @@ export default function ApplicationsPage() {
           )}
         </DialogContent>
       </Dialog>
+
+        {/* Delete Confirmation Modal */}
+        <Dialog open={showDeleteModal} onOpenChange={setShowDeleteModal}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Delete Application</DialogTitle>
+            </DialogHeader>
+            <div className="space-y-4">
+              <p className="text-gray-600">
+                Are you sure you want to delete the application for <strong>{deleteApp?.job_title}</strong> at <strong>{deleteApp?.company}</strong>?
+              </p>
+              <p className="text-sm text-gray-500">
+                This action cannot be undone.
+              </p>
     </div>
+            <DialogFooter>
+              <Button 
+                variant="destructive" 
+                onClick={handleDeleteApplication}
+                disabled={deleting}
+              >
+                {deleting ? (
+                  <span className="flex items-center">
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                    Deleting...
+                  </span>
+                ) : (
+                  "Delete Application"
+                )}
+              </Button>
+              <DialogClose asChild>
+                <Button type="button" variant="outline">Cancel</Button>
+              </DialogClose>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        {/* Status Update Confirmation Modal */}
+        <Dialog open={showStatusModal} onOpenChange={setShowStatusModal}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Update Application Status</DialogTitle>
+            </DialogHeader>
+            <div className="space-y-4">
+              <p className="text-gray-600">
+                Change status from <strong>{statusApp?.currentStatus.replace('_', ' ').replace(/\b\w/g, l => l.toUpperCase())}</strong> to <strong>{statusApp?.newStatus.replace('_', ' ').replace(/\b\w/g, l => l.toUpperCase())}</strong>?
+              </p>
+            </div>
+            <DialogFooter>
+              <Button 
+                onClick={handleStatusUpdate}
+                disabled={updatingStatus}
+              >
+                {updatingStatus ? (
+                  <span className="flex items-center">
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                    Updating...
+                  </span>
+                ) : (
+                  "Update Status"
+                )}
+              </Button>
+              <DialogClose asChild>
+                <Button type="button" variant="outline">Cancel</Button>
+              </DialogClose>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+      </div>
+    </FadeIn>
   );
 }
 

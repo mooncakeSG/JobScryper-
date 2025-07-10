@@ -190,4 +190,59 @@ function useToast() {
   }
 }
 
-export { useToast, toast } 
+// Convenience methods for different toast types
+function useToastWithVariants() {
+  const { toast, dismiss } = useToast()
+
+  const success = React.useCallback((title: string, description?: string) => {
+    return toast({
+      title,
+      description,
+      variant: "success",
+    })
+  }, [toast])
+
+  const error = React.useCallback((title: string, description?: string) => {
+    return toast({
+      title,
+      description,
+      variant: "destructive",
+    })
+  }, [toast])
+
+  const warning = React.useCallback((title: string, description?: string) => {
+    return toast({
+      title,
+      description,
+      variant: "warning",
+    })
+  }, [toast])
+
+  const info = React.useCallback((title: string, description?: string) => {
+    return toast({
+      title,
+      description,
+      variant: "info",
+    })
+  }, [toast])
+
+  const loading = React.useCallback((title: string, description?: string) => {
+    return toast({
+      title,
+      description,
+      variant: "default",
+    })
+  }, [toast])
+
+  return {
+    toast,
+    success,
+    error,
+    warning,
+    info,
+    loading,
+    dismiss,
+  }
+}
+
+export { useToast, useToastWithVariants, toast } 

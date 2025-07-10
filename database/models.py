@@ -463,7 +463,58 @@ class SystemSettings(Base):
     updated_at = Column(DateTime(timezone=True), onupdate=func.now(), nullable=True)
     
     def __repr__(self):
-        return f"<SystemSettings(key='{self.setting_key}', value={self.setting_value})>"
+        return f"<SystemSettings(key='{self.setting_key}', type='{self.setting_type}')>"
+
+
+class SavedJob(Base):
+    """Saved jobs for users to review later."""
+    
+    __tablename__ = 'saved_jobs'
+    
+    # Primary key
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    user_id = Column(Integer, ForeignKey('users.id'), nullable=False)
+    
+    # Job identification
+    job_id = Column(String(255), nullable=True)  # External job ID from source
+    job_url = Column(String(1000), nullable=True)  # Job posting URL
+    
+    # Job data (stored as JSON for flexibility)
+    job_data = Column(JSON, nullable=False)  # Complete job data from source
+    
+    # Metadata
+    source = Column(String(100), nullable=True)  # indeed, linkedin, etc.
+    saved_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    
+    # Timestamps
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    updated_at = Column(DateTime(timezone=True), onupdate=func.now(), nullable=True)
+    
+    # Database constraints
+    __table_args__ = (
+        Index('idx_saved_jobs_user_id', 'user_id'),
+        Index('idx_saved_jobs_job_id', 'job_id'),
+        Index('idx_saved_jobs_saved_at', 'saved_at'),
+        UniqueConstraint('user_id', 'job_id', name='uq_user_job_id'),
+        UniqueConstraint('user_id', 'job_url', name='uq_user_job_url'),
+    )
+    
+    def __repr__(self):
+        return f"<SavedJob(id={self.id}, user_id={self.user_id}, job_id='{self.job_id}')>"
+    
+    def to_dict(self) -> Dict[str, Any]:
+        """Convert saved job to dictionary for API responses."""
+        return {
+            'id': self.id,
+            'user_id': self.user_id,
+            'job_id': self.job_id,
+            'job_url': self.job_url,
+            'job_data': self.job_data,
+            'source': self.source,
+            'saved_at': self.saved_at.isoformat() if self.saved_at else None,
+            'created_at': self.created_at.isoformat() if self.created_at else None,
+            'updated_at': self.updated_at.isoformat() if self.updated_at else None
+        }
 
 
 # Model registry for migrations and utilities
@@ -474,5 +525,6 @@ ALL_MODELS = [
     JobApplication,
     SearchHistory,
     AIAnalysisCache,
-    SystemSettings
+    SystemSettings,
+    SavedJob
 ] 

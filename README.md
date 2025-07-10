@@ -30,7 +30,7 @@ Auto Applyer/
 
 ## 🛠️ Installation
 
-### Quick Setup (Recommended)
+### Development Setup (Local)
 
 1. **Download/Clone the Project**
 2. **Run the Setup Script**:
@@ -43,6 +43,35 @@ Auto Applyer/
    - Install Playwright browsers
    - Create necessary directories
    - Test the installation
+
+### Production Setup (SQLite Cloud)
+
+For production deployment with SQLite Cloud:
+
+1. **Follow the SQLite Cloud Setup Guide**:
+   ```bash
+   # Read the comprehensive setup guide
+   cat SQLITE_CLOUD_SETUP.md
+   ```
+
+2. **Configure Production Environment**:
+   ```bash
+   # Copy and configure production environment
+   cp production.env.example .env.production
+   # Edit .env.production with your SQLite Cloud credentials
+   ```
+
+3. **Deploy to Production**:
+   ```bash
+   # Run the automated deployment script
+   python scripts/deploy_production.py
+   ```
+
+4. **Validate Setup**:
+   ```bash
+   # Validate SQLite Cloud configuration
+   python scripts/validate_sqlite_cloud.py
+   ```
 
 ### Manual Installation
 

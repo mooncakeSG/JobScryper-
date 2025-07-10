@@ -3,7 +3,7 @@
 import * as React from "react"
 import * as ToastPrimitives from "@radix-ui/react-toast"
 import { cva, type VariantProps } from "class-variance-authority"
-import { X } from "lucide-react"
+import { X, CheckCircle, AlertCircle, Info, XCircle } from "lucide-react"
 
 import { cn } from "@/lib/utils"
 
@@ -119,6 +119,50 @@ type ToastProps = React.ComponentPropsWithoutRef<typeof Toast>
 
 type ToastActionElement = React.ReactElement<typeof ToastAction>
 
+// Toast with icon component
+interface ToastWithIconProps extends ToastProps {
+  icon?: React.ReactNode
+  title?: string
+  description?: string
+}
+
+function ToastWithIcon({ 
+  icon, 
+  title, 
+  description, 
+  variant = "default",
+  className,
+  ...props 
+}: ToastWithIconProps) {
+  const getDefaultIcon = () => {
+    switch (variant) {
+      case "success":
+        return <CheckCircle className="h-5 w-5 text-green-600" />
+      case "destructive":
+        return <XCircle className="h-5 w-5 text-red-600" />
+      case "warning":
+        return <AlertCircle className="h-5 w-5 text-yellow-600" />
+      case "info":
+        return <Info className="h-5 w-5 text-blue-600" />
+      default:
+        return null
+    }
+  }
+
+  return (
+    <Toast variant={variant} className={cn("flex items-start space-x-3", className)} {...props}>
+      <div className="flex-shrink-0 mt-0.5">
+        {icon || getDefaultIcon()}
+      </div>
+      <div className="flex-1 min-w-0">
+        {title && <ToastTitle>{title}</ToastTitle>}
+        {description && <ToastDescription>{description}</ToastDescription>}
+      </div>
+      <ToastClose />
+    </Toast>
+  )
+}
+
 export {
   type ToastProps,
   type ToastActionElement,
@@ -129,4 +173,5 @@ export {
   ToastDescription,
   ToastClose,
   ToastAction,
+  ToastWithIcon,
 } 

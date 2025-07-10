@@ -96,8 +96,9 @@ export function AppLayout({ children }: AppLayoutProps) {
                               pathname === item.href
                                 ? "bg-blue-50 text-blue-600"
                                 : "text-gray-700 hover:text-blue-600 hover:bg-gray-50",
-                              "group flex gap-x-3 rounded-md p-2 text-sm leading-6 font-semibold"
+                              "group flex gap-x-3 rounded-md p-2 text-sm leading-6 font-semibold focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
                             )}
+                            aria-current={pathname === item.href ? "page" : undefined}
                           >
                             <item.icon
                               className={cn(
@@ -106,6 +107,7 @@ export function AppLayout({ children }: AppLayoutProps) {
                                   : "text-gray-400 group-hover:text-blue-600",
                                 "h-6 w-6 shrink-0"
                               )}
+                              aria-hidden="true"
                             />
                             {item.name}
                           </Link>
@@ -131,28 +133,30 @@ export function AppLayout({ children }: AppLayoutProps) {
                 <nav className="mt-5">
                   <ul role="list" className="space-y-1">
                     {navigation.map((item) => (
-                      <li key={item.name}>
-                        <Link
-                          href={item.href}
-                          onClick={() => setSidebarOpen(false)}
-                          className={cn(
-                            pathname === item.href
-                              ? "bg-blue-50 text-blue-600"
-                              : "text-gray-700 hover:text-blue-600 hover:bg-gray-50",
-                            "group flex gap-x-3 rounded-md p-2 text-sm leading-6 font-semibold"
-                          )}
-                        >
-                          <item.icon
+                                              <li key={item.name}>
+                          <Link
+                            href={item.href}
+                            onClick={() => setSidebarOpen(false)}
                             className={cn(
                               pathname === item.href
-                                ? "text-blue-600"
-                                : "text-gray-400 group-hover:text-blue-600",
-                              "h-6 w-6 shrink-0"
+                                ? "bg-blue-50 text-blue-600"
+                                : "text-gray-700 hover:text-blue-600 hover:bg-gray-50",
+                              "group flex gap-x-3 rounded-md p-2 text-sm leading-6 font-semibold focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
                             )}
-                          />
-                          {item.name}
-                        </Link>
-                      </li>
+                            aria-current={pathname === item.href ? "page" : undefined}
+                          >
+                            <item.icon
+                              className={cn(
+                                pathname === item.href
+                                  ? "text-blue-600"
+                                  : "text-gray-400 group-hover:text-blue-600",
+                                "h-6 w-6 shrink-0"
+                              )}
+                              aria-hidden="true"
+                            />
+                            {item.name}
+                          </Link>
+                        </li>
                     ))}
                   </ul>
                 </nav>
@@ -182,7 +186,7 @@ export function AppLayout({ children }: AppLayoutProps) {
             </div>
 
             {/* Page content */}
-            <main className="py-6">
+            <main id="main-content" className="py-6">
               <div className="px-4 sm:px-6 lg:px-8">
                 {children}
               </div>
