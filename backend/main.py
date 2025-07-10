@@ -118,61 +118,126 @@ async def analyze_resume(file: UploadFile = File(...)):
     if file.content_type not in ["application/pdf", "application/vnd.openxmlformats-officedocument.wordprocessingml.document"]:
         raise HTTPException(status_code=400, detail="Only PDF and DOCX files are supported")
     
+    temp_path = f"temp_{file.filename}"
     try:
         # Save the uploaded file temporarily
-        temp_path = f"temp_{file.filename}"
         with open(temp_path, "wb") as buffer:
             content = await file.read()
             buffer.write(content)
         
         # Parse the resume
         resume_data = resume_parser.parse_resume(temp_path)
+        sections = resume_data.get("sections", {})
+        skills = [s.strip() for s in sections.get("skills", "").split(",") if s.strip()]
+        tech_skills = [s.strip() for s in sections.get("technical_skills", "").split(",") if s.strip()]
+        experience = sections.get("experience", "")
+        education = sections.get("education", "")
+        summary = sections.get("summary", "")
+        
+        # Dynamic ATS score calculation
+        ats_score = 50
+        if skills:
+            ats_score += min(20, len(skills) * 2)
+        if tech_skills:
+            ats_score += min(15, len(tech_skills) * 2)
+        if experience:
+            ats_score += 7
+        if education:
+            ats_score += 5
+        if summary:
+            ats_score += 3
+        ats_score = min(100, ats_score)
+        
+        # Improved Strengths
+        strengths = []
+        # Technical skills: at least 3 unique skills
+        if tech_skills and len(set(tech_skills)) >= 3:
+            strengths.append("Strong technical skills section")
+        # Experience: at least 2 job entries or >100 characters
+        if experience and (len([line for line in experience.split('\n') if line.strip()]) >= 2 or len(experience) > 100):
+            strengths.append("Clear work experience progression")
+        # Education: look for degree keywords
+        degree_keywords = ["bachelor", "master", "phd", "associate", "degree", "diploma", "certification", "certified"]
+        if education and any(degree in education.lower() for degree in degree_keywords):
+            strengths.append("Education section present")
+        # Summary: at least 20 words
+        if summary and len(summary.split()) >= 20:
+            strengths.append("Professional summary included")
+        # Skills: at least 5 skills
+        if skills and len(skills) >= 5:
+            strengths.append("Skills section present")
+        
+        # Suggestions
+        suggestions = []
+        if not tech_skills:
+            suggestions.append("Add more technical keywords relevant to your field")
+        if not experience:
+            suggestions.append("Include quantifiable achievements in your experience")
+        if not education:
+            suggestions.append("Add an education section")
+        if not summary:
+            suggestions.append("Add a professional summary at the top of your resume")
+        if ats_score < 80:
+            suggestions.append("Optimize for ATS scanning by using more keywords")
+        # Always show at least one suggestion
+        if not suggestions:
+            suggestions.append("Your resume is strong! Consider tailoring it for each job application for best results.")
+        
+        # Improvements
+        improvements = []
+        if ats_score < 90:
+            improvements.append("Add more action verbs and measurable results")
+        if len(skills) < 5:
+            improvements.append("List at least 5 relevant skills")
+        
+        # Keywords
+        keywords = list(set(skills + tech_skills))
+        
+        analysis = {
+            "ats_score": ats_score,
+            "suggestions": suggestions,
+            "strengths": strengths,
+            "keywords": keywords,
+            "improvements": improvements
+        }
         
         # Clean up temporary file
         os.remove(temp_path)
-        
-        # Mock ATS analysis (replace with actual implementation)
-        analysis = {
-            "ats_score": 85,
-            "suggestions": [
-                "Add more technical keywords relevant to your field",
-                "Include quantifiable achievements in your experience",
-                "Ensure consistent formatting throughout the document"
-            ],
-            "strengths": [
-                "Strong technical skills section",
-                "Clear work experience progression",
-                "Professional formatting"
-            ],
-            "keywords": ["Python", "React", "AWS", "Machine Learning", "API", "Database"],
-            "improvements": [
-                "Add more action verbs",
-                "Include relevant certifications",
-                "Optimize for ATS scanning"
-            ]
-        }
-        
         return analysis
-        
     except Exception as e:
-        # Clean up temporary file if it exists
         if os.path.exists(temp_path):
             os.remove(temp_path)
         raise HTTPException(status_code=500, detail=f"Failed to analyze resume: {str(e)}")
 
 @app.post("/api/auth/signup")
-async def signup(form: OAuth2PasswordRequestForm = Depends()):
-    if form.username in users_store:
+async def signup(user_data: dict = Body(...)):
+    """User registration endpoint"""
+    username = user_data.get("username")
+    password = user_data.get("password")
+    
+    if not username or not password:
+        raise HTTPException(status_code=400, detail="Username and password are required")
+    
+    if username in users_store:
         raise HTTPException(status_code=400, detail="Username already registered")
-    users_store[form.username] = {"username": form.username, "password": form.password}
+    
+    users_store[username] = {"username": username, "password": password}
     return {"message": "User registered successfully"}
 
 @app.post("/api/auth/login")
-async def login(form: OAuth2PasswordRequestForm = Depends()):
-    user = users_store.get(form.username)
-    if not user or user["password"] != form.password:
+async def login(user_data: dict = Body(...)):
+    """User login endpoint"""
+    username = user_data.get("username")
+    password = user_data.get("password")
+    
+    if not username or not password:
+        raise HTTPException(status_code=400, detail="Username and password are required")
+    
+    user = users_store.get(username)
+    if not user or user["password"] != password:
         raise HTTPException(status_code=401, detail="Incorrect username or password")
-    access_token = create_access_token(data={"sub": form.username})
+    
+    access_token = create_access_token(data={"sub": username})
     return {"access_token": access_token, "token_type": "bearer"}
 
 @app.get("/api/auth/me")
@@ -257,8 +322,11 @@ async def search_jobs(
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Search failed: {str(e)}")
 
+app_id_counter = 1
+
 @app.post("/api/applications")
 async def create_application(application_data: Dict[str, Any]):
+    global app_id_counter
     """Create a new job application"""
     try:
         # Validate required fields
@@ -267,9 +335,14 @@ async def create_application(application_data: Dict[str, Any]):
             if not application_data.get(field):
                 raise HTTPException(status_code=400, detail=f"Missing required field: {field}")
         
-        # Create application object
+        # Generate a unique ID
+        if "applications" not in saved_jobs_store:
+            saved_jobs_store["applications"] = []
+        existing_ids = {app["id"] for app in saved_jobs_store["applications"]}
+        while app_id_counter in existing_ids:
+            app_id_counter += 1
         application = {
-            "id": len(saved_jobs_store.get("applications", [])) + 1,
+            "id": app_id_counter,
             "job_title": application_data.get("job_title"),
             "company": application_data.get("company"),
             "location": application_data.get("location", ""),
@@ -282,6 +355,7 @@ async def create_application(application_data: Dict[str, Any]):
             "notes": application_data.get("notes"),
             "match_score": application_data.get("match_score", 0)
         }
+        app_id_counter += 1
         
         # Store in memory (replace with database in production)
         if "applications" not in saved_jobs_store:

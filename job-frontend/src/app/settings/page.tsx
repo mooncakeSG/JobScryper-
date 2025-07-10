@@ -54,12 +54,12 @@ export default function SettingsPage() {
   };
 
   return (
-    <div className="space-y-6">
-      <div className="bg-gradient-to-r from-blue-600 to-purple-600 rounded-lg p-6 text-white">
-        <h1 className="text-2xl font-bold mb-2">Settings</h1>
-        <p className="text-blue-100">
-          Manage your account preferences and application settings
-        </p>
+    <div className="space-y-8">
+      <div className="bg-white rounded-xl shadow-sm px-8 py-8 mb-8 flex flex-col md:flex-row md:items-center md:justify-between border-b border-gray-100">
+        <div className="mb-4 md:mb-0">
+          <h1 className="text-4xl font-extrabold text-gray-900 tracking-tight mb-2">Settings</h1>
+          <p className="text-lg text-gray-500">Manage your account preferences and application settings</p>
+        </div>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">

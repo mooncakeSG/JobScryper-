@@ -76,27 +76,29 @@ export default function Dashboard() {
   return (
     <div className="space-y-6">
       {/* Welcome Section */}
-      <div className="bg-gradient-to-r from-blue-600 to-purple-600 rounded-lg p-6 text-white">
-        <h1 className="text-2xl font-bold mb-2">
-          Welcome to {process.env.NEXT_PUBLIC_APP_NAME}
-        </h1>
-        <p className="text-blue-100">
-          Your AI-powered job application assistant. Track applications, optimize your resume, and land your dream job.
-        </p>
+      <div className="bg-white rounded-xl shadow-sm px-8 py-8 mb-8 flex flex-col md:flex-row md:items-center md:justify-between border-b border-gray-100">
+        <div className="mb-4 md:mb-0">
+          <h1 className="text-4xl font-extrabold text-gray-900 tracking-tight mb-2">
+            Welcome to {process.env.NEXT_PUBLIC_APP_NAME}
+          </h1>
+          <p className="text-lg text-gray-500">
+            Your AI-powered job application assistant. Track applications, optimize your resume, and land your dream job.
+          </p>
+        </div>
       </div>
 
       {/* Stats Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
         {stats.map((stat, index) => (
-          <Card key={index} className="hover:shadow-lg transition-shadow">
+          <Card key={index} className="rounded-2xl shadow-sm border border-gray-100 bg-white transition-all hover:shadow-lg group">
             <CardHeader className="flex flex-row items-center justify-between pb-2">
-              <CardTitle className="text-sm font-medium text-gray-600">
+              <CardTitle className="text-sm font-semibold text-gray-700">
                 {stat.title}
               </CardTitle>
-              <stat.icon className={`h-4 w-4 ${stat.color}`} />
+              <stat.icon className={`h-6 w-6 ${stat.color}`} />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold text-gray-900">{stat.value}</div>
+              <div className="text-3xl font-extrabold text-gray-900 mb-1">{stat.value}</div>
               <p className="text-xs text-gray-500 mt-1">{stat.change}</p>
             </CardContent>
           </Card>
@@ -108,17 +110,17 @@ export default function Dashboard() {
         <h2 className="text-lg font-semibold text-gray-900">Quick Actions</h2>
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
           {quickActions.map((action, index) => (
-            <Card key={index} className="hover:shadow-lg transition-shadow">
+            <Card key={index} className="rounded-2xl shadow-sm border border-gray-100 bg-white transition-all hover:shadow-lg group">
               <CardHeader>
                 <div className={`w-12 h-12 rounded-lg ${action.color} flex items-center justify-center mb-4`}>
                   <action.icon className="h-6 w-6" />
                 </div>
-                <CardTitle className="text-lg">{action.title}</CardTitle>
+                <CardTitle className="text-lg font-bold text-gray-900">{action.title}</CardTitle>
               </CardHeader>
               <CardContent>
                 <p className="text-gray-600 mb-4">{action.description}</p>
                 <Link href={action.href}>
-                  <Button variant="outline" className="w-full">
+                  <Button variant="outline" className="w-full font-semibold">
                     Get Started
                   </Button>
                 </Link>
@@ -129,9 +131,9 @@ export default function Dashboard() {
       </div>
 
       {/* Recent Activity */}
-      <Card>
+      <Card className="rounded-2xl shadow-sm border border-gray-100 bg-white">
         <CardHeader>
-          <CardTitle>Recent Activity</CardTitle>
+          <CardTitle className="text-lg font-bold text-gray-900">Recent Activity</CardTitle>
         </CardHeader>
         <CardContent>
           <div className="space-y-4">

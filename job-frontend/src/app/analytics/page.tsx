@@ -96,35 +96,33 @@ export default function AnalyticsPage() {
   ];
 
   return (
-    <div className="space-y-6">
-      <div className="bg-gradient-to-r from-blue-600 to-purple-600 rounded-lg p-6 text-white">
-        <h1 className="text-2xl font-bold mb-2">Job Application Analytics</h1>
-        <p className="text-blue-100">
-          Track your job search progress and identify areas for improvement
-        </p>
+    <div className="space-y-8">
+      <div className="bg-white rounded-xl shadow-sm px-8 py-8 mb-8 flex flex-col md:flex-row md:items-center md:justify-between border-b border-gray-100">
+        <div className="mb-4 md:mb-0">
+          <h1 className="text-4xl font-extrabold text-gray-900 tracking-tight mb-2">Job Application Analytics</h1>
+          <p className="text-lg text-gray-500">Track your job search progress and identify areas for improvement</p>
+        </div>
       </div>
 
       {/* Key Metrics */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
         {stats.map((stat, index) => (
-          <Card key={index} className="hover:shadow-lg transition-shadow">
+          <Card key={index} className="rounded-2xl shadow-sm border border-gray-100 bg-white transition-all hover:shadow-lg group">
             <CardHeader className="flex flex-row items-center justify-between pb-2">
-              <CardTitle className="text-sm font-medium text-gray-600">
+              <CardTitle className="text-sm font-semibold text-gray-700">
                 {stat.title}
               </CardTitle>
-              <stat.icon className={`h-4 w-4 ${stat.color}`} />
+              <stat.icon className={`h-6 w-6 ${stat.color}`} />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold text-gray-900">{stat.value}</div>
+              <div className="text-3xl font-extrabold text-gray-900 mb-1">{stat.value}</div>
               <div className="flex items-center mt-1">
                 {stat.trend === "up" ? (
-                  <TrendingUp className="h-4 w-4 text-green-500 mr-1" />
+                  <TrendingUp className="h-5 w-5 text-green-500 mr-1" />
                 ) : (
-                  <TrendingDown className="h-4 w-4 text-red-500 mr-1" />
+                  <TrendingDown className="h-5 w-5 text-red-500 mr-1" />
                 )}
-                <span className={`text-xs ${stat.trend === "up" ? "text-green-600" : "text-red-600"}`}>
-                  {stat.change}
-                </span>
+                <span className={`text-xs font-semibold ${stat.trend === "up" ? "text-green-600" : "text-red-600"}`}>{stat.change}</span>
                 <span className="text-xs text-gray-500 ml-1">vs last month</span>
               </div>
             </CardContent>
@@ -133,13 +131,13 @@ export default function AnalyticsPage() {
       </div>
 
       {/* Charts Grid */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
         {/* Monthly Applications Chart */}
-        <Card>
+        <Card className="rounded-2xl shadow-sm border border-gray-100 bg-white">
           <CardHeader>
-            <CardTitle>Monthly Application Trends</CardTitle>
+            <CardTitle className="text-lg font-bold text-gray-900">Monthly Application Trends</CardTitle>
           </CardHeader>
-          <CardContent>
+          <CardContent className="pt-2 pb-4">
             <ResponsiveContainer width="100%" height={300}>
               <BarChart data={monthlyApplications}>
                 <CartesianGrid strokeDasharray="3 3" />
@@ -155,11 +153,11 @@ export default function AnalyticsPage() {
         </Card>
 
         {/* Application Status Pie Chart */}
-        <Card>
+        <Card className="rounded-2xl shadow-sm border border-gray-100 bg-white">
           <CardHeader>
-            <CardTitle>Application Status Distribution</CardTitle>
+            <CardTitle className="text-lg font-bold text-gray-900">Application Status Distribution</CardTitle>
           </CardHeader>
-          <CardContent>
+          <CardContent className="pt-2 pb-4">
             <ResponsiveContainer width="100%" height={300}>
               <PieChart>
                 <Pie
@@ -181,11 +179,11 @@ export default function AnalyticsPage() {
         </Card>
 
         {/* Job Types Chart */}
-        <Card>
+        <Card className="rounded-2xl shadow-sm border border-gray-100 bg-white">
           <CardHeader>
-            <CardTitle>Applications by Job Type</CardTitle>
+            <CardTitle className="text-lg font-bold text-gray-900">Applications by Job Type</CardTitle>
           </CardHeader>
-          <CardContent>
+          <CardContent className="pt-2 pb-4">
             <ResponsiveContainer width="100%" height={300}>
               <LineChart data={jobTypes}>
                 <CartesianGrid strokeDasharray="3 3" />

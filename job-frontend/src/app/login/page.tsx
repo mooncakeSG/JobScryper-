@@ -20,14 +20,10 @@ export default function LoginPage() {
     setLoading(true);
     setError(null);
     try {
-      const params = new URLSearchParams();
-      params.append("username", username);
-      params.append("password", password);
-      params.append("grant_type", "password");
       const response = await fetch("/api/auth/login", {
         method: "POST",
-        headers: { "Content-Type": "application/x-www-form-urlencoded" },
-        body: params.toString(),
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ username, password }),
       });
       if (!response.ok) throw new Error("Invalid credentials");
       const data = await response.json();
@@ -41,39 +37,41 @@ export default function LoginPage() {
   };
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-gray-50">
-      <Card className="w-full max-w-md">
+    <div className="flex min-h-screen items-center justify-center bg-gradient-to-br from-gray-50 to-white px-4">
+      <Card className="w-full max-w-md rounded-2xl shadow-lg border border-gray-100 bg-white p-8">
         <CardHeader>
-          <CardTitle>Login</CardTitle>
+          <CardTitle className="text-2xl font-extrabold text-gray-900 mb-2">Login</CardTitle>
         </CardHeader>
         <CardContent>
-          <form onSubmit={handleLogin} className="space-y-4">
+          <form onSubmit={handleLogin} className="space-y-6">
             <div>
-              <Label htmlFor="username">Username</Label>
+              <Label htmlFor="username" className="text-sm font-semibold text-gray-700">Username</Label>
               <Input
                 id="username"
                 value={username}
                 onChange={e => setUsername(e.target.value)}
                 required
                 autoFocus
+                className="mt-1"
               />
             </div>
             <div>
-              <Label htmlFor="password">Password</Label>
+              <Label htmlFor="password" className="text-sm font-semibold text-gray-700">Password</Label>
               <Input
                 id="password"
                 type="password"
                 value={password}
                 onChange={e => setPassword(e.target.value)}
                 required
+                className="mt-1"
               />
             </div>
-            {error && <div className="text-red-600 text-sm">{error}</div>}
-            <Button type="submit" className="w-full" disabled={loading}>
+            {error && <div className="text-red-600 text-sm font-medium">{error}</div>}
+            <Button type="submit" className="w-full h-12 text-lg font-semibold shadow-md" disabled={loading}>
               {loading ? "Logging in..." : "Login"}
             </Button>
             <div className="text-center text-sm mt-2">
-              Don&apos;t have an account? <a href="/signup" className="text-blue-600 hover:underline">Sign up</a>
+              Don&apos;t have an account? <a href="/signup" className="text-blue-600 hover:underline font-semibold">Sign up</a>
             </div>
           </form>
         </CardContent>

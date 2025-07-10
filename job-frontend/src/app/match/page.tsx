@@ -206,50 +206,52 @@ export default function MatchPage() {
   };
 
   return (
-    <div className="space-y-6">
-      <div className="bg-gradient-to-r from-blue-600 to-purple-600 rounded-lg p-6 text-white">
-        <h1 className="text-2xl font-bold mb-2">Find Your Perfect Job Match</h1>
-        <p className="text-blue-100">
-          Discover opportunities that match your skills and preferences
-        </p>
+    <div className="space-y-8">
+      <div className="bg-white rounded-xl shadow-sm px-8 py-8 mb-8 flex flex-col md:flex-row md:items-center md:justify-between border-b border-gray-100">
+        <div className="mb-4 md:mb-0">
+          <h1 className="text-4xl font-extrabold text-gray-900 tracking-tight mb-2">Job Matching</h1>
+          <p className="text-lg text-gray-500">Find jobs that match your skills and preferences. Apply or save jobs directly from here.</p>
+        </div>
       </div>
 
       {/* Search and Filters */}
-      <Card>
+      <Card className="rounded-2xl shadow-sm border border-gray-100 bg-white mb-8">
         <CardHeader>
-          <CardTitle className="flex items-center space-x-2">
-            <Search className="h-5 w-5" />
+          <CardTitle className="flex items-center space-x-2 text-xl font-bold text-black">
+            <Search className="h-6 w-6" />
             <span>Search Jobs</span>
           </CardTitle>
         </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div>
+        <CardContent className="space-y-6">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+            <div className="space-y-2">
               <Label htmlFor="search">Job Title or Keywords</Label>
               <Input
                 id="search"
                 placeholder="e.g., Software Engineer, React Developer"
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
+                className="focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all"
               />
             </div>
-            <div>
+            <div className="space-y-2">
               <Label htmlFor="location">Location</Label>
               <Input
                 id="location"
                 placeholder="e.g., San Francisco, Remote"
                 value={location}
                 onChange={(e) => setLocation(e.target.value)}
+                className="focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all"
               />
             </div>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <div>
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-6">
+            <div className="space-y-2">
               <Label htmlFor="jobType">Job Type</Label>
               <select
                 id="jobType"
-                className="w-full p-2 border border-gray-300 rounded-md"
+                className="w-full p-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all"
                 value={filters.jobType}
                 onChange={(e) => setFilters({...filters, jobType: e.target.value})}
               >
@@ -260,35 +262,37 @@ export default function MatchPage() {
                 <option value="remote">Remote</option>
               </select>
             </div>
-            <div>
+            <div className="space-y-2">
               <Label htmlFor="minSalary">Minimum Salary</Label>
               <Input
                 id="minSalary"
                 placeholder="e.g., 80000"
                 value={filters.minSalary}
                 onChange={(e) => setFilters({...filters, minSalary: e.target.value})}
+                className="focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all"
               />
             </div>
-            <div>
+            <div className="space-y-2">
               <Label htmlFor="company">Company</Label>
               <Input
                 id="company"
                 placeholder="e.g., Google, Microsoft"
                 value={filters.company}
                 onChange={(e) => setFilters({...filters, company: e.target.value})}
+                className="focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all"
               />
             </div>
           </div>
 
-          <Button onClick={searchJobs} disabled={loading} className="w-full">
+          <Button onClick={searchJobs} disabled={loading} className="w-full h-12 text-lg font-semibold shadow-md">
             {loading ? (
               <>
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                <Loader2 className="mr-2 h-5 w-5 animate-spin" />
                 Searching...
               </>
             ) : (
               <>
-                <Search className="mr-2 h-4 w-4" />
+                <Search className="mr-2 h-5 w-5" />
                 Search Jobs
               </>
             )}
@@ -316,53 +320,59 @@ export default function MatchPage() {
             </CardContent>
           </Card>
         ) : (
-          <div className="grid gap-4">
+          <div className="grid gap-6">
             {filteredJobs.map((job) => (
-              <Card key={job.id} className="hover:shadow-lg transition-shadow">
-                <CardHeader>
-                  <div className="flex items-start justify-between">
-                    <div>
-                      <CardTitle className="text-lg">{job.title}</CardTitle>
-                      <div className="flex items-center space-x-4 mt-2 text-sm text-gray-600">
-                        <div className="flex items-center space-x-1">
+              <Card key={job.id} className="rounded-2xl shadow-sm border border-gray-100 bg-white transition-all hover:shadow-lg group">
+                <CardHeader className="pb-0">
+                  <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+                    <div className="min-w-0">
+                      <CardTitle className="text-xl font-bold text-gray-900 truncate mb-1">{job.title}</CardTitle>
+                      <div className="flex flex-wrap items-center gap-4 text-sm text-gray-600 mb-1">
+                        <div className="flex items-center gap-1">
                           <Building2 className="h-4 w-4" />
-                          <span>{job.company}</span>
+                          <span className="truncate max-w-[120px]">{job.company}</span>
                         </div>
-                        <div className="flex items-center space-x-1">
+                        <div className="flex items-center gap-1">
                           <MapPin className="h-4 w-4" />
-                          <span>{job.location}</span>
+                          <span className="truncate max-w-[100px]">{job.location}</span>
                         </div>
-                        <div className="flex items-center space-x-1">
+                        <div className="flex items-center gap-1">
                           <Clock className="h-4 w-4" />
                           <span>{job.datePosted}</span>
                         </div>
                       </div>
                     </div>
-                    <div className="flex items-center space-x-2">
-                      <span className={`px-2 py-1 rounded-full text-xs font-medium ${getMatchColor(job.matchScore)}`}>
+                    <div className="flex items-center gap-2 min-w-fit">
+                      <span className={`inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-semibold border ${getMatchColor(job.matchScore)} shadow-sm`} title="Match Score">
                         {job.matchScore}% Match
                       </span>
-                      <Star className="h-4 w-4 text-yellow-500" />
+                      <Star className="h-5 w-5 text-yellow-500" />
                     </div>
                   </div>
                 </CardHeader>
-                <CardContent>
-                  <p className="text-gray-700 mb-4">{job.description}</p>
-                  
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center space-x-4 text-sm">
-                      <span className="bg-gray-100 px-2 py-1 rounded">{job.jobType}</span>
+                <CardContent className="pt-2 pb-4">
+                  <p className="text-gray-700 mb-4 text-base leading-relaxed">{job.description}</p>
+                  <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+                    <div className="flex flex-wrap items-center gap-4 text-sm">
+                      <span className="bg-gray-100 px-3 py-1 rounded-full font-medium">{job.jobType}</span>
                       {job.salary && (
-                        <span className="text-green-600 font-medium">{job.salary}</span>
+                        <span className="text-green-600 font-semibold">{job.salary}</span>
                       )}
                       <span className="text-gray-500">via {job.source}</span>
                     </div>
-                    
-                    <div className="flex space-x-2">
+                    <div className="flex flex-row gap-2 min-w-fit">
                       {isLoggedIn ? (
                         <>
-                          <Button onClick={() => handleSave(job)} variant="outline" size="sm" disabled={!!savedJobs[job.id] || savingId === job.id}>
-                            {savedJobs[job.id] ? "Saved" : savingId === job.id ? "Saving..." : "Save"}
+                          <Button
+                            onClick={() => handleSave(job)}
+                            variant="ghost"
+                            size="icon"
+                            disabled={!!savedJobs[job.id] || savingId === job.id}
+                            title={savedJobs[job.id] ? "Saved" : savingId === job.id ? "Saving..." : "Save Job"}
+                            aria-label={savedJobs[job.id] ? "Saved" : savingId === job.id ? "Saving..." : "Save Job"}
+                            className={!!savedJobs[job.id] ? "bg-green-50 text-green-700" : "hover:bg-blue-50"}
+                          >
+                            <Star className="h-5 w-5" />
                           </Button>
                           <Button
                             onClick={async () => {
@@ -382,11 +392,14 @@ export default function MatchPage() {
                                 window.open(job.url, '_blank', 'noopener,noreferrer');
                               }
                             }}
-                            size="sm"
+                            size="icon"
+                            variant="ghost"
                             disabled={!job.url}
+                            title="Apply"
+                            aria-label="Apply"
+                            className="hover:bg-yellow-50"
                           >
-                            <ExternalLink className="mr-1 h-4 w-4" />
-                            Apply
+                            <ExternalLink className="h-5 w-5" />
                           </Button>
                         </>
                       ) : (
