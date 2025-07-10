@@ -261,52 +261,198 @@ async def search_jobs(
 async def create_application(application_data: Dict[str, Any]):
     """Create a new job application"""
     try:
-        # Mock application creation
+        # Validate required fields
+        required_fields = ["job_title", "company"]
+        for field in required_fields:
+            if not application_data.get(field):
+                raise HTTPException(status_code=400, detail=f"Missing required field: {field}")
+        
+        # Create application object
         application = {
-            "id": "app_123",
-            "job_title": application_data.get("job_title", ""),
-            "company": application_data.get("company", ""),
+            "id": len(saved_jobs_store.get("applications", [])) + 1,
+            "job_title": application_data.get("job_title"),
+            "company": application_data.get("company"),
             "location": application_data.get("location", ""),
-            "status": "applied",
-            "date_applied": "2024-01-15",
+            "status": application_data.get("status", "applied"),
+            "application_date": datetime.now().isoformat(),
+            "salary_min": application_data.get("salary_min"),
+            "salary_max": application_data.get("salary_max"),
+            "job_url": application_data.get("job_url"),
+            "interview_date": application_data.get("interview_date"),
+            "notes": application_data.get("notes"),
             "match_score": application_data.get("match_score", 0)
         }
         
+        # Store in memory (replace with database in production)
+        if "applications" not in saved_jobs_store:
+            saved_jobs_store["applications"] = []
+        saved_jobs_store["applications"].append(application)
+        
         return {"message": "Application created successfully", "application": application}
         
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to create application: {str(e)}")
 
 @app.get("/api/applications")
-async def get_applications(user_id: str = "demo"):
-    """Get user's job applications"""
+async def get_applications(
+    user_id: str = "demo",
+    status: str = None,
+    search: str = None,
+    page: int = 1,
+    limit: int = 20
+):
+    """Get user's job applications with filtering and pagination"""
     try:
-        # Mock applications data
-        applications = [
-            {
-                "id": "app_1",
-                "job_title": "Senior Software Engineer",
-                "company": "TechCorp Inc.",
-                "location": "San Francisco, CA",
-                "status": "interview",
-                "date_applied": "2024-01-10",
-                "match_score": 95
-            },
-            {
-                "id": "app_2",
-                "job_title": "Frontend Developer",
-                "company": "StartupXYZ",
-                "location": "Remote",
-                "status": "applied",
-                "date_applied": "2024-01-08",
-                "match_score": 88
-            }
-        ]
+        # Get applications from memory (replace with database in production)
+        applications = saved_jobs_store.get("applications", [])
         
-        return applications
+        # Add mock data if empty
+        if not applications:
+            applications = [
+                {
+                    "id": 1,
+                    "job_title": "Senior Software Engineer",
+                    "company": "TechCorp",
+                    "location": "San Francisco, CA",
+                    "status": "interview_scheduled",
+                    "application_date": "2024-01-15T10:00:00",
+                    "salary_min": 120000,
+                    "salary_max": 180000,
+                    "job_url": "https://example.com/job1",
+                    "interview_date": "2024-01-25T14:00:00",
+                    "notes": "Phone interview scheduled with hiring manager",
+                    "match_score": 95
+                },
+                {
+                    "id": 2,
+                    "job_title": "Full Stack Developer",
+                    "company": "StartupXYZ",
+                    "location": "Remote",
+                    "status": "applied",
+                    "application_date": "2024-01-14T09:30:00",
+                    "salary_min": 90000,
+                    "salary_max": 130000,
+                    "job_url": "https://example.com/job2",
+                    "notes": "Applied via company website",
+                    "match_score": 88
+                },
+                {
+                    "id": 3,
+                    "job_title": "Frontend Engineer",
+                    "company": "BigTech Inc",
+                    "location": "New York, NY",
+                    "status": "rejected",
+                    "application_date": "2024-01-10T11:15:00",
+                    "salary_min": 110000,
+                    "salary_max": 160000,
+                    "notes": "Rejected after technical interview",
+                    "match_score": 92
+                },
+                {
+                    "id": 4,
+                    "job_title": "DevOps Engineer",
+                    "company": "CloudSolutions",
+                    "location": "Austin, TX",
+                    "status": "offer_received",
+                    "application_date": "2024-01-08T16:45:00",
+                    "salary_min": 100000,
+                    "salary_max": 140000,
+                    "notes": "Great offer! Considering acceptance",
+                    "match_score": 87
+                },
+                {
+                    "id": 5,
+                    "job_title": "Product Manager",
+                    "company": "Innovation Labs",
+                    "location": "Seattle, WA",
+                    "status": "pending",
+                    "application_date": "2024-01-12T13:20:00",
+                    "salary_min": 130000,
+                    "salary_max": 190000,
+                    "notes": "Application submitted, waiting for response",
+                    "match_score": 78
+                }
+            ]
+            saved_jobs_store["applications"] = applications
+        
+        # Apply filters
+        filtered_applications = applications
+        
+        if status and status != "all":
+            filtered_applications = [app for app in filtered_applications if app["status"] == status]
+        
+        if search:
+            search_lower = search.lower()
+            filtered_applications = [
+                app for app in filtered_applications 
+                if (search_lower in app["job_title"].lower() or 
+                    search_lower in app["company"].lower() or 
+                    search_lower in app.get("location", "").lower())
+            ]
+        
+        # Apply pagination
+        total_count = len(filtered_applications)
+        start_index = (page - 1) * limit
+        end_index = start_index + limit
+        paginated_applications = filtered_applications[start_index:end_index]
+        
+        return {
+            "applications": paginated_applications,
+            "pagination": {
+                "page": page,
+                "limit": limit,
+                "total": total_count,
+                "pages": (total_count + limit - 1) // limit
+            }
+        }
         
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to fetch applications: {str(e)}")
+
+@app.patch("/api/applications/{application_id}")
+async def update_application(application_id: int, update_data: Dict[str, Any]):
+    """Update an existing job application"""
+    try:
+        applications = saved_jobs_store.get("applications", [])
+        application = next((app for app in applications if app["id"] == application_id), None)
+        
+        if not application:
+            raise HTTPException(status_code=404, detail="Application not found")
+        
+        # Update allowed fields
+        allowed_fields = ["status", "notes", "interview_date", "salary_min", "salary_max"]
+        for field in allowed_fields:
+            if field in update_data:
+                application[field] = update_data[field]
+        
+        return {"message": "Application updated successfully", "application": application}
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to update application: {str(e)}")
+
+@app.delete("/api/applications/{application_id}")
+async def delete_application(application_id: int):
+    """Delete a job application"""
+    try:
+        applications = saved_jobs_store.get("applications", [])
+        application = next((app for app in applications if app["id"] == application_id), None)
+        
+        if not application:
+            raise HTTPException(status_code=404, detail="Application not found")
+        
+        applications.remove(application)
+        saved_jobs_store["applications"] = applications
+        
+        return {"message": "Application deleted successfully"}
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to delete application: {str(e)}")
 
 @app.get("/api/analytics")
 async def get_analytics(user_id: str = "demo"):

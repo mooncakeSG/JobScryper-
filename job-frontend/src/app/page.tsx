@@ -58,6 +58,13 @@ export default function Dashboard() {
       color: "bg-green-50 text-green-600 hover:bg-green-100"
     },
     {
+      title: "Track Applications",
+      description: "Manage and track your job applications",
+      icon: FileText,
+      href: "/applications",
+      color: "bg-orange-50 text-orange-600 hover:bg-orange-100"
+    },
+    {
       title: "View Analytics",
       description: "Track your application progress and insights",
       icon: BarChart3,
@@ -99,7 +106,7 @@ export default function Dashboard() {
       {/* Quick Actions */}
       <div className="space-y-4">
         <h2 className="text-lg font-semibold text-gray-900">Quick Actions</h2>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
           {quickActions.map((action, index) => (
             <Card key={index} className="hover:shadow-lg transition-shadow">
               <CardHeader>
