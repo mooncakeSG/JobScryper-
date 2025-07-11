@@ -1,17 +1,16 @@
 "use client";
 
-import { useState, useEffect } from "react";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import React, { useState, useEffect } from "react";
+import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
 import { JobCardSkeletonList } from "@/components/ui/job-card-skeleton";
 import { useToastWithVariants } from "@/hooks/use-toast";
-import { 
-  Search, 
-  Filter, 
-  Plus, 
+import {
+  Search,
+  Plus,
   Calendar,
   Building,
   MapPin,
@@ -36,20 +35,7 @@ import {
 } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogClose } from "@/components/ui/dialog";
 import { FadeIn } from "@/components/ui/animation";
-
-interface JobApplication {
-  id: number;
-  job_title: string;
-  company: string;
-  location: string;
-  status: string;
-  application_date: string;
-  salary_min?: number;
-  salary_max?: number;
-  job_url?: string;
-  interview_date?: string;
-  notes?: string;
-}
+import { apiService, JobApplication } from '@/lib/api';
 
 interface FormErrors {
   job_title?: string;
@@ -91,6 +77,10 @@ const statusOptions = [
   { value: "withdrawn", label: "Withdrawn" }
 ];
 
+function getStatusColor(status: string | undefined): string {
+  return statusColors[(status as keyof typeof statusColors) || 'pending'] || 'bg-gray-100 text-gray-800';
+}
+
 export default function ApplicationsPage() {
   const [applications, setApplications] = useState<JobApplication[]>([]);
   const [filteredApplications, setFilteredApplications] = useState<JobApplication[]>([]);
@@ -98,7 +88,7 @@ export default function ApplicationsPage() {
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
   const [sortBy, setSortBy] = useState("application_date");
-  const { success, error, info } = useToastWithVariants();
+  const { success, error } = useToastWithVariants();
   const [showAddModal, setShowAddModal] = useState(false);
   const [newApp, setNewApp] = useState({
     job_title: "",
@@ -125,30 +115,23 @@ export default function ApplicationsPage() {
   const [statusApp, setStatusApp] = useState<{id: number, currentStatus: string, newStatus: string} | null>(null);
   const [updatingStatus, setUpdatingStatus] = useState(false);
 
-  // Validation functions
-  const validateForm = (data: any): FormErrors => {
+  const validateForm = (data: Partial<JobApplication>): FormErrors => {
     const errors: FormErrors = {};
-    
-    if (!data.job_title?.trim()) {
+    if (typeof data.job_title === 'string' && !data.job_title?.trim()) {
       errors.job_title = "Job title is required";
     }
-    
-    if (!data.company?.trim()) {
+    if (typeof data.company === 'string' && !data.company?.trim()) {
       errors.company = "Company is required";
     }
-    
-    if (data.job_url && !isValidUrl(data.job_url)) {
+    if (data.job_url && !isValidUrl(String(data.job_url))) {
       errors.job_url = "Please enter a valid URL";
     }
-    
     if (data.salary_min && data.salary_max && Number(data.salary_min) > Number(data.salary_max)) {
       errors.salary_max = "Maximum salary must be greater than minimum salary";
     }
-    
-    if (data.interview_date && data.application_date && new Date(data.interview_date) < new Date(data.application_date)) {
+    if (data.interview_date && data.application_date && new Date(String(data.interview_date)) < new Date(String(data.application_date))) {
       errors.interview_date = "Interview date cannot be before application date";
     }
-    
     return errors;
   };
 
@@ -172,31 +155,19 @@ export default function ApplicationsPage() {
   const fetchApplications = async () => {
     try {
       setLoading(true);
-      const response = await fetch('/api/applications?user_id=demo');
-      if (response.ok) {
-        const data = await response.json();
-        setApplications(data.applications || []);
-        success(
-          "Applications loaded",
-          `Successfully loaded ${data.applications?.length || 0} applications`
-        );
-      } else {
-        console.error('Failed to fetch applications');
-        error(
-          "Error",
-          "Failed to load applications. Using demo data."
-        );
-        // For demo purposes, use mock data
-        setApplications(mockApplications);
-      }
-    } catch (err) {
+      const data = await apiService.getApplications();
+      setApplications(data);
+      success(
+        "Applications loaded",
+        `Successfully loaded ${data.length} applications`
+      );
+    } catch (err: any) {
       console.error('Error fetching applications:', err);
       error(
-        "Network Error",
-        "Unable to connect to server. Using demo data."
+        "Error",
+        err.response?.data?.detail || "Failed to load applications"
       );
-      // For demo purposes, use mock data
-      setApplications(mockApplications);
+      setApplications([]);
     } finally {
       setLoading(false);
     }
@@ -204,35 +175,28 @@ export default function ApplicationsPage() {
 
   const filterApplications = () => {
     let filtered = applications;
-
-    // Filter by search term
     if (searchTerm) {
       filtered = filtered.filter(app => 
-        app.job_title.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        app.company.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        app.location.toLowerCase().includes(searchTerm.toLowerCase())
+        (app.job_title ?? '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+        (app.company ?? '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+        (app.location ?? '').toLowerCase().includes(searchTerm.toLowerCase())
       );
     }
-
-    // Filter by status
     if (statusFilter !== "all") {
       filtered = filtered.filter(app => app.status === statusFilter);
     }
-
-    // Sort applications
     filtered.sort((a, b) => {
       switch (sortBy) {
         case "application_date":
-          return new Date(b.application_date).getTime() - new Date(a.application_date).getTime();
+          return new Date(b.application_date ?? '').getTime() - new Date(a.application_date ?? '').getTime();
         case "company":
-          return a.company.localeCompare(b.company);
+          return (a.company ?? '').localeCompare(b.company ?? '');
         case "status":
-          return a.status.localeCompare(b.status);
+          return (a.status ?? '').localeCompare(b.status ?? '');
         default:
           return 0;
       }
     });
-
     setFilteredApplications(filtered);
   };
 
@@ -240,12 +204,9 @@ export default function ApplicationsPage() {
     try {
       const response = await fetch(`/api/applications/${applicationId}`, {
         method: 'PATCH',
-        headers: {
-          'Content-Type': 'application/json',
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ status: newStatus }),
       });
-
       if (response.ok) {
         setApplications(prev => 
           prev.map(app => 
@@ -265,7 +226,7 @@ export default function ApplicationsPage() {
         );
       }
     } catch (err) {
-      console.error('Error updating application status:', err instanceof Error ? err.message : err);
+      console.error('Error updating application status:', err);
       error(
         "Network Error",
         "Unable to update application status"
@@ -300,7 +261,7 @@ export default function ApplicationsPage() {
         );
       }
     } catch (err) {
-      console.error('Error deleting application:', err instanceof Error ? err.message : err);
+      console.error('Error deleting application:', err);
       error(
         "Network Error",
         "Unable to delete application"
@@ -311,7 +272,11 @@ export default function ApplicationsPage() {
   };
 
   const openStatusModal = (app: JobApplication, newStatus: string) => {
-    setStatusApp({ id: app.id, currentStatus: app.status, newStatus });
+    if (typeof app.id !== 'number') {
+      console.error('Invalid application id:', app.id);
+      return;
+    }
+    setStatusApp({ id: app.id, currentStatus: app.status ?? '', newStatus });
     setShowStatusModal(true);
   };
 
@@ -321,12 +286,9 @@ export default function ApplicationsPage() {
     try {
       const response = await fetch(`/api/applications/${statusApp.id}`, {
         method: 'PATCH',
-        headers: {
-          'Content-Type': 'application/json',
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ status: statusApp.newStatus }),
       });
-
       if (response.ok) {
         setApplications(prev => 
           prev.map(app => 
@@ -348,7 +310,7 @@ export default function ApplicationsPage() {
         );
       }
     } catch (err) {
-      console.error('Error updating application status:', err instanceof Error ? err.message : err);
+      console.error('Error updating application status:', err);
       error(
         "Network Error",
         "Unable to update application status"
@@ -358,24 +320,21 @@ export default function ApplicationsPage() {
     }
   };
 
-  const handleAddChange = (e: any) => {
+  const handleAddChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
     const { name, value } = e.target;
     setNewApp(prev => ({ ...prev, [name]: value }));
     setAddErrors(prev => ({ ...prev, [name]: undefined }));
   };
 
-  const handleAddApplication = async (e: any) => {
+  const handleAddApplication = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
-    
-    // Validate form
-    const validationErrors = validateForm(newApp);
+    const validationErrors = validateForm({ ...newApp, salary_min: newApp.salary_min ? Number(newApp.salary_min) : undefined, salary_max: newApp.salary_max ? Number(newApp.salary_max) : undefined });
     if (Object.keys(validationErrors).length > 0) {
       setAddErrors(validationErrors);
       return;
     }
-    
     setAdding(true);
-    setAddErrors({}); // Clear previous errors
+    setAddErrors({});
     try {
       const response = await fetch('/api/applications', {
         method: 'POST',
@@ -412,7 +371,7 @@ export default function ApplicationsPage() {
         }
       }
     } catch (err) {
-      console.error('Error adding application:', err instanceof Error ? err.message : err);
+      console.error('Error adding application:', err);
       error("Network Error", "Unable to add application");
     } finally {
       setAdding(false);
@@ -422,10 +381,10 @@ export default function ApplicationsPage() {
   const openEditModal = (app: JobApplication) => {
     setEditApp({ ...app });
     setShowEditModal(true);
-    setEditErrors({}); // Clear previous errors
+    setEditErrors({});
   };
 
-  const handleEditChange = (e: any) => {
+  const handleEditChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
     const { name, value } = e.target;
     setEditApp(prev => prev ? { ...prev, [name]: value } : null);
     setEditErrors(prev => ({ ...prev, [name]: undefined }));
@@ -435,19 +394,16 @@ export default function ApplicationsPage() {
     setEditApp(prev => prev ? { ...prev, status: val } : null);
   };
 
-  const handleEditApplication = async (e: any) => {
+  const handleEditApplication = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     if (!editApp) return;
-    
-    // Validate form
-    const validationErrors = validateForm(editApp);
+    const validationErrors = validateForm({ ...editApp, salary_min: editApp.salary_min ? Number(editApp.salary_min) : undefined, salary_max: editApp.salary_max ? Number(editApp.salary_max) : undefined });
     if (Object.keys(validationErrors).length > 0) {
       setEditErrors(validationErrors);
       return;
     }
-    
     setEditing(true);
-    setEditErrors({}); // Clear previous errors
+    setEditErrors({});
     try {
       const response = await fetch(`/api/applications/${editApp.id}`, {
         method: 'PATCH',
@@ -479,12 +435,8 @@ export default function ApplicationsPage() {
           error("Update Failed", "Failed to update application");
         }
       }
-    } catch (err: unknown) {
-      if (err instanceof Error) {
-        console.error('Error updating application:', err.message);
-      } else {
-        console.error('Error updating application:', err);
-      }
+    } catch (err) {
+      console.error('Error updating application:', err);
       error("Network Error", "Unable to update application");
     } finally {
       setEditing(false);
@@ -529,16 +481,13 @@ export default function ApplicationsPage() {
           <Skeleton className="h-8 w-64" />
           <Skeleton className="h-10 w-32" />
         </div>
-        
         <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
           <Skeleton className="h-24 w-full" />
           <Skeleton className="h-24 w-full" />
           <Skeleton className="h-24 w-full" />
           <Skeleton className="h-24 w-full" />
         </div>
-
         <Skeleton className="h-32 w-full" />
-
         <JobCardSkeletonList count={5} />
       </div>
     );
@@ -579,7 +528,7 @@ export default function ApplicationsPage() {
               <p className="text-sm font-medium text-gray-500 mb-1">Active Applications</p>
               <p className="text-3xl font-bold text-gray-900">
                 {applications.filter(app => 
-                  ['pending', 'applied', 'screening', 'interview_scheduled', 'interviewed', 'technical_test'].includes(app.status)
+                  ['pending', 'applied', 'screening', 'interview_scheduled', 'interviewed', 'technical_test'].includes(app.status ?? '')
                 ).length}
               </p>
             </div>
@@ -595,7 +544,7 @@ export default function ApplicationsPage() {
               <p className="text-sm font-medium text-gray-500 mb-1">Interviews</p>
               <p className="text-3xl font-bold text-gray-900">
                 {applications.filter(app => 
-                  ['interview_scheduled', 'interviewed'].includes(app.status)
+                  ['interview_scheduled', 'interviewed'].includes(app.status ?? '')
                 ).length}
               </p>
             </div>
@@ -716,16 +665,16 @@ export default function ApplicationsPage() {
                   <div className="flex-1 min-w-0">
                     <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-2">
                       <div className="min-w-0">
-                        <h3 className="text-xl font-bold text-gray-900 truncate mb-1">{application.job_title}</h3>
+                        <h3 className="text-xl font-bold text-gray-900 truncate mb-1">{application.job_title ?? ''}</h3>
                         <div className="flex flex-wrap items-center gap-4 text-sm text-gray-600 mb-1">
                           <div className="flex items-center gap-1">
                             <Building className="h-4 w-4" aria-hidden="true" />
-                            <span className="truncate max-w-[120px]">{application.company}</span>
+                            <span className="truncate max-w-[120px]">{application.company ?? ''}</span>
                           </div>
                           {application.location && (
                             <div className="flex items-center gap-1">
                               <MapPin className="h-4 w-4" aria-hidden="true" />
-                              <span className="truncate max-w-[100px]">{application.location}</span>
+                              <span className="truncate max-w-[100px]">{application.location ?? ''}</span>
                             </div>
                           )}
                           {(application.salary_min || application.salary_max) && (
@@ -737,22 +686,22 @@ export default function ApplicationsPage() {
                         </div>
                       </div>
                       <span
-                        className={`inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-semibold border ${statusColors[application.status as keyof typeof statusColors] || 'bg-gray-100 text-gray-800'} shadow-sm`}
-                        title={application.status.replace('_', ' ').replace(/\b\w/g, l => l.toUpperCase())}
+                        className={`inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-semibold border ${getStatusColor(application.status)} shadow-sm`}
+                        title={(application.status ?? '').replace('_', ' ').replace(/\b\w/g, l => l.toUpperCase())}
                       >
-                        {getStatusIcon(application.status)}
-                        {application.status.replace('_', ' ').replace(/\b\w/g, l => l.toUpperCase())}
+                        {getStatusIcon(application.status ?? '')}
+                        {(application.status ?? '').replace('_', ' ').replace(/\b\w/g, l => l.toUpperCase())}
                       </span>
                     </div>
                     <div className="flex flex-wrap items-center gap-4 text-xs text-gray-500 mt-2">
                       <div className="flex items-center gap-1">
                         <Calendar className="h-4 w-4" aria-hidden="true" />
-                        Applied: {formatDate(application.application_date)}
+                        Applied: {formatDate(application.application_date ?? '')}
                       </div>
                       {application.interview_date && (
                         <div className="flex items-center gap-1">
                           <Clock className="h-4 w-4" aria-hidden="true" />
-                          Interview: {formatDate(application.interview_date)}
+                          Interview: {formatDate(application.interview_date ?? '')}
                         </div>
                       )}
                     </div>
@@ -832,7 +781,7 @@ export default function ApplicationsPage() {
                   <Input 
                     id="job_title" 
                     name="job_title" 
-                    value={newApp.job_title} 
+                    value={newApp.job_title ?? ''} 
                     onChange={handleAddChange} 
                     required 
                     className={addErrors.job_title ? "border-red-500 focus:ring-red-500 focus:border-red-500" : ""}
@@ -851,7 +800,7 @@ export default function ApplicationsPage() {
                   <Input 
                     id="company" 
                     name="company" 
-                    value={newApp.company} 
+                    value={newApp.company ?? ''} 
                     onChange={handleAddChange} 
                     required 
                     className={addErrors.company ? "border-red-500 focus:ring-red-500 focus:border-red-500" : ""}
@@ -870,7 +819,7 @@ export default function ApplicationsPage() {
                   <Input 
                     id="location" 
                     name="location" 
-                    value={newApp.location} 
+                    value={newApp.location ?? ''} 
                     onChange={handleAddChange}
                     className={addErrors.location ? "border-red-500 focus:ring-red-500 focus:border-red-500" : ""}
                     aria-invalid={!!addErrors.location}
@@ -898,32 +847,32 @@ export default function ApplicationsPage() {
               </div>
               <div>
                 <Label htmlFor="application_date">Application Date</Label>
-                <Input id="application_date" name="application_date" type="date" value={newApp.application_date} onChange={handleAddChange} />
+                <Input id="application_date" name="application_date" type="date" value={newApp.application_date ?? ''} onChange={handleAddChange} />
                   {addErrors.application_date && <p className="text-sm text-red-500">{addErrors.application_date}</p>}
               </div>
               <div>
                 <Label htmlFor="salary_min">Salary Min</Label>
-                <Input id="salary_min" name="salary_min" type="number" value={newApp.salary_min} onChange={handleAddChange} />
+                <Input id="salary_min" name="salary_min" type="number" value={newApp.salary_min ?? ''} onChange={handleAddChange} />
                   {addErrors.salary_min && <p className="text-sm text-red-500">{addErrors.salary_min}</p>}
               </div>
               <div>
                 <Label htmlFor="salary_max">Salary Max</Label>
-                <Input id="salary_max" name="salary_max" type="number" value={newApp.salary_max} onChange={handleAddChange} />
+                <Input id="salary_max" name="salary_max" type="number" value={newApp.salary_max ?? ''} onChange={handleAddChange} />
                   {addErrors.salary_max && <p className="text-sm text-red-500">{addErrors.salary_max}</p>}
               </div>
               <div>
                 <Label htmlFor="job_url">Job URL</Label>
-                <Input id="job_url" name="job_url" value={newApp.job_url} onChange={handleAddChange} />
+                <Input id="job_url" name="job_url" value={newApp.job_url ?? ''} onChange={handleAddChange} />
                   {addErrors.job_url && <p className="text-sm text-red-500">{addErrors.job_url}</p>}
               </div>
               <div>
                 <Label htmlFor="interview_date">Interview Date</Label>
-                <Input id="interview_date" name="interview_date" type="date" value={newApp.interview_date} onChange={handleAddChange} />
+                <Input id="interview_date" name="interview_date" type="date" value={newApp.interview_date ?? ''} onChange={handleAddChange} />
                   {addErrors.interview_date && <p className="text-sm text-red-500">{addErrors.interview_date}</p>}
               </div>
               <div className="md:col-span-2">
                 <Label htmlFor="notes">Notes</Label>
-                <Input id="notes" name="notes" value={newApp.notes} onChange={handleAddChange} />
+                <Input id="notes" name="notes" value={newApp.notes ?? ''} onChange={handleAddChange} />
               </div>
             </div>
             <DialogFooter>
@@ -958,17 +907,17 @@ export default function ApplicationsPage() {
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
                   <Label htmlFor="edit_job_title">Job Title</Label>
-                  <Input id="edit_job_title" name="job_title" value={editApp.job_title} onChange={handleEditChange} required />
+                  <Input id="edit_job_title" name="job_title" value={editApp.job_title ?? ''} onChange={handleEditChange} required />
                     {editErrors.job_title && <p className="text-sm text-red-500">{editErrors.job_title}</p>}
                 </div>
                 <div>
                   <Label htmlFor="edit_company">Company</Label>
-                  <Input id="edit_company" name="company" value={editApp.company} onChange={handleEditChange} required />
+                  <Input id="edit_company" name="company" value={editApp.company ?? ''} onChange={handleEditChange} required />
                     {editErrors.company && <p className="text-sm text-red-500">{editErrors.company}</p>}
                 </div>
                 <div>
                   <Label htmlFor="edit_location">Location</Label>
-                  <Input id="edit_location" name="location" value={editApp.location} onChange={handleEditChange} />
+                  <Input id="edit_location" name="location" value={editApp.location ?? ''} onChange={handleEditChange} />
                     {editErrors.location && <p className="text-sm text-red-500">{editErrors.location}</p>}
                 </div>
                 <div>
@@ -986,32 +935,32 @@ export default function ApplicationsPage() {
                 </div>
                 <div>
                   <Label htmlFor="edit_application_date">Application Date</Label>
-                  <Input id="edit_application_date" name="application_date" type="date" value={editApp.application_date} onChange={handleEditChange} />
+                  <Input id="edit_application_date" name="application_date" type="date" value={editApp.application_date ?? ''} onChange={handleEditChange} />
                     {editErrors.application_date && <p className="text-sm text-red-500">{editErrors.application_date}</p>}
                 </div>
                 <div>
                   <Label htmlFor="edit_salary_min">Salary Min</Label>
-                  <Input id="edit_salary_min" name="salary_min" type="number" value={editApp.salary_min ?? ""} onChange={handleEditChange} />
+                  <Input id="edit_salary_min" name="salary_min" type="number" value={editApp.salary_min ?? ''} onChange={handleEditChange} />
                     {editErrors.salary_min && <p className="text-sm text-red-500">{editErrors.salary_min}</p>}
                 </div>
                 <div>
                   <Label htmlFor="edit_salary_max">Salary Max</Label>
-                  <Input id="edit_salary_max" name="salary_max" type="number" value={editApp.salary_max ?? ""} onChange={handleEditChange} />
+                  <Input id="edit_salary_max" name="salary_max" type="number" value={editApp.salary_max ?? ''} onChange={handleEditChange} />
                     {editErrors.salary_max && <p className="text-sm text-red-500">{editErrors.salary_max}</p>}
                 </div>
                 <div>
                   <Label htmlFor="edit_job_url">Job URL</Label>
-                  <Input id="edit_job_url" name="job_url" value={editApp.job_url ?? ""} onChange={handleEditChange} />
+                  <Input id="edit_job_url" name="job_url" value={editApp.job_url ?? ''} onChange={handleEditChange} />
                     {editErrors.job_url && <p className="text-sm text-red-500">{editErrors.job_url}</p>}
                 </div>
                 <div>
                   <Label htmlFor="edit_interview_date">Interview Date</Label>
-                  <Input id="edit_interview_date" name="interview_date" type="date" value={editApp.interview_date ?? ""} onChange={handleEditChange} />
+                  <Input id="edit_interview_date" name="interview_date" type="date" value={editApp.interview_date ?? ''} onChange={handleEditChange} />
                     {editErrors.interview_date && <p className="text-sm text-red-500">{editErrors.interview_date}</p>}
                 </div>
                 <div className="md:col-span-2">
                   <Label htmlFor="edit_notes">Notes</Label>
-                  <Input id="edit_notes" name="notes" value={editApp.notes ?? ""} onChange={handleEditChange} />
+                  <Input id="edit_notes" name="notes" value={editApp.notes ?? ''} onChange={handleEditChange} />
                 </div>
               </div>
               <DialogFooter>
@@ -1045,7 +994,7 @@ export default function ApplicationsPage() {
             </DialogHeader>
             <div className="space-y-4">
               <p className="text-gray-600">
-                Are you sure you want to delete the application for <strong>{deleteApp?.job_title}</strong> at <strong>{deleteApp?.company}</strong>?
+                Are you sure you want to delete the application for <strong>{deleteApp?.job_title ?? ''}</strong> at <strong>{deleteApp?.company ?? ''}</strong>?
               </p>
               <p className="text-sm text-gray-500">
                 This action cannot be undone.
@@ -1081,7 +1030,7 @@ export default function ApplicationsPage() {
             </DialogHeader>
             <div className="space-y-4">
               <p className="text-gray-600">
-                Change status from <strong>{statusApp?.currentStatus.replace('_', ' ').replace(/\b\w/g, l => l.toUpperCase())}</strong> to <strong>{statusApp?.newStatus.replace('_', ' ').replace(/\b\w/g, l => l.toUpperCase())}</strong>?
+                Change status from <strong>{(statusApp?.currentStatus ?? '').replace('_', ' ').replace(/\b\w/g, l => l.toUpperCase())}</strong> to <strong>{(statusApp?.newStatus ?? '').replace('_', ' ').replace(/\b\w/g, l => l.toUpperCase())}</strong>?
               </p>
             </div>
             <DialogFooter>
@@ -1107,64 +1056,4 @@ export default function ApplicationsPage() {
       </div>
     </FadeIn>
   );
-}
-
-// Mock data for demonstration
-const mockApplications: JobApplication[] = [
-  {
-    id: 1,
-    job_title: "Senior Software Engineer",
-    company: "TechCorp",
-    location: "San Francisco, CA",
-    status: "interview_scheduled",
-    application_date: "2024-01-15",
-    salary_min: 120000,
-    salary_max: 180000,
-    job_url: "https://example.com/job1",
-    interview_date: "2024-01-25",
-    notes: "Phone interview scheduled with hiring manager"
-  },
-  {
-    id: 2,
-    job_title: "Full Stack Developer",
-    company: "StartupXYZ",
-    location: "Remote",
-    status: "applied",
-    application_date: "2024-01-14",
-    salary_min: 90000,
-    salary_max: 130000,
-    job_url: "https://example.com/job2"
-  },
-  {
-    id: 3,
-    job_title: "Frontend Engineer",
-    company: "BigTech Inc",
-    location: "New York, NY",
-    status: "rejected",
-    application_date: "2024-01-10",
-    salary_min: 110000,
-    salary_max: 160000,
-    notes: "Rejected after technical interview"
-  },
-  {
-    id: 4,
-    job_title: "DevOps Engineer",
-    company: "CloudSolutions",
-    location: "Austin, TX",
-    status: "offer_received",
-    application_date: "2024-01-08",
-    salary_min: 100000,
-    salary_max: 140000,
-    notes: "Great offer! Considering acceptance"
-  },
-  {
-    id: 5,
-    job_title: "Product Manager",
-    company: "Innovation Labs",
-    location: "Seattle, WA",
-    status: "pending",
-    application_date: "2024-01-12",
-    salary_min: 130000,
-    salary_max: 190000
-  }
-]; 
+} 

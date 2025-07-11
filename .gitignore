@@ -15,7 +15,7 @@ venv/
 ENV/
 env/
 production.env.example
-
+.env.production
 # Jupyter Notebook Checkpoints (if used)
 .ipynb_checkpoints/
 

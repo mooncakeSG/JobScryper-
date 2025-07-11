@@ -240,24 +240,28 @@ async def signup(user_data: dict = Body(...)):
     if not email:
         email = f"{username}@example.com"
     
-    # Check if username already exists
-    existing_user = fetchone("SELECT id FROM users WHERE username = ?", (username,))
-    if existing_user:
-        raise HTTPException(status_code=400, detail="Username already registered")
-    
-    # Check if email already exists
-    existing_email = fetchone("SELECT id FROM users WHERE email = ?", (email,))
-    if existing_email:
-        raise HTTPException(status_code=400, detail="Email already registered")
-    
-    # Hash password and create user
-    hashed_password = hash_password(password)
-    user_id = execute(
-        "INSERT INTO users (username, password_hash, email, created_at) VALUES (?, ?, ?, ?)",
-        (username, hashed_password, email, datetime.now().isoformat())
-    )
-    
-    return {"message": "User registered successfully", "user_id": user_id}
+    try:
+        # Check if username already exists
+        existing_user = fetchone("SELECT id FROM users WHERE username = ?", (username,))
+        if existing_user:
+            raise HTTPException(status_code=400, detail="Username already registered")
+        
+        # Check if email already exists
+        existing_email = fetchone("SELECT id FROM users WHERE email = ?", (email,))
+        if existing_email:
+            raise HTTPException(status_code=400, detail="Email already registered")
+        
+        # Hash password and create user
+        hashed_password = hash_password(password)
+        user_id = execute(
+            "INSERT INTO users (username, password_hash, email, is_active, is_verified, created_at) VALUES (?, ?, ?, ?, ?, ?)",
+            (username, hashed_password, email, True, False, datetime.now().isoformat())
+        )
+        
+        return {"message": "User registered successfully", "user_id": user_id}
+    except Exception as e:
+        print(f"Signup error: {e}")  # Log the error for debugging
+        raise HTTPException(status_code=500, detail=f"Signup failed: {str(e)}")
 
 @app.post("/api/auth/login")
 async def login(user_data: dict = Body(...)):

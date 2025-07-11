@@ -30,8 +30,17 @@ def test_signup():
         }
         response = requests.post(f"{BASE_URL}/api/auth/signup", json=data)
         print(f"✅ Signup: {response.status_code}")
-        print(f"   Response: {response.json()}")
-        return response.status_code == 200
+        
+        if response.status_code == 200:
+            print(f"   Response: {response.json()}")
+            return True
+        else:
+            print(f"   Error Response: {response.text}")
+            try:
+                print(f"   JSON Error: {response.json()}")
+            except:
+                pass
+            return False
     except Exception as e:
         print(f"❌ Signup failed: {e}")
         return False

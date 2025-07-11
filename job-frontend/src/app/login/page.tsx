@@ -20,17 +20,12 @@ export default function LoginPage() {
     setLoading(true);
     setError(null);
     try {
-      const response = await fetch("/api/auth/login", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ username, password }),
-      });
-      if (!response.ok) throw new Error("Invalid credentials");
-      const data = await response.json();
+      const data = await apiService.login({ username, password });
       localStorage.setItem("token", data.access_token);
+      localStorage.setItem("user_id", data.user_id.toString());
       router.push("/");
     } catch (err: any) {
-      setError(err.message || "Login failed");
+      setError(err.response?.data?.detail || err.message || "Login failed");
     } finally {
       setLoading(false);
     }

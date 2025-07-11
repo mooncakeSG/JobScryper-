@@ -6,12 +6,12 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { apiService } from "@/lib/api";
 
 export default function SignupPage() {
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [email, setEmail] = useState("");
-  const [fullName, setFullName] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
@@ -23,19 +23,11 @@ export default function SignupPage() {
     setError(null);
     setSuccess(false);
     try {
-      const response = await fetch("/api/auth/signup", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ username, password, email, fullName }),
-      });
-      if (!response.ok) {
-        const data = await response.json();
-        throw new Error(data.detail || "Signup failed");
-      }
+      await apiService.signup({ username, password, email });
       setSuccess(true);
       setTimeout(() => router.push("/login"), 1200);
     } catch (err: any) {
-      setError(err.message || "Signup failed");
+      setError(err.response?.data?.detail || err.message || "Signup failed");
     } finally {
       setLoading(false);
     }
@@ -49,16 +41,6 @@ export default function SignupPage() {
         </CardHeader>
         <CardContent>
           <form onSubmit={handleSignup} className="space-y-6">
-            <div>
-              <Label htmlFor="fullName" className="text-sm font-semibold text-gray-700">Full Name</Label>
-              <Input
-                id="fullName"
-                value={fullName}
-                onChange={e => setFullName(e.target.value)}
-                required
-                className="mt-1"
-              />
-            </div>
             <div>
               <Label htmlFor="email" className="text-sm font-semibold text-gray-700">Email</Label>
               <Input

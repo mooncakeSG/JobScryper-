@@ -60,15 +60,19 @@ export interface JobMatch {
   url?: string;
 }
 
-export interface JobApplication {
-  id: string;
+export type JobApplication = {
+  id?: number;
   job_title: string;
   company: string;
   location: string;
   status: string;
-  date_applied: string;
-  match_score: number;
-}
+  application_date: string;
+  salary_min?: number;
+  salary_max?: number;
+  job_url?: string;
+  interview_date?: string;
+  notes?: string;
+};
 
 export interface AnalyticsData {
   total_applications: number;
@@ -89,6 +93,22 @@ export interface AnalyticsData {
 
 // API functions
 export const apiService = {
+  // Authentication
+  async login(credentials: { username: string; password: string }): Promise<any> {
+    const response = await api.post('/api/auth/login', credentials);
+    return response.data;
+  },
+
+  async signup(userData: { username: string; password: string; email?: string }): Promise<any> {
+    const response = await api.post('/api/auth/signup', userData);
+    return response.data;
+  },
+
+  async getCurrentUser(): Promise<any> {
+    const response = await api.get('/api/auth/me');
+    return response.data;
+  },
+
   // Health check
   async healthCheck(): Promise<any> {
     const response = await api.get('/health');
@@ -138,8 +158,16 @@ export const apiService = {
   },
 
   async getApplications(userId: string = 'demo'): Promise<JobApplication[]> {
-    const response = await api.get(`/api/applications?user_id=${userId}`);
-    return response.data;
+    const response = await api.get('/api/applications');
+    const data = response.data;
+    // Handle both array and paginated response formats
+    if (Array.isArray(data)) {
+      return data;
+    } else if (data.applications) {
+      return data.applications;
+    } else {
+      return [];
+    }
   },
 
   async updateApplication(applicationId: string, updates: Partial<JobApplication>): Promise<any> {
