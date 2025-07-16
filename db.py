@@ -128,11 +128,6 @@ def cloud_db_connection() -> Generator:
         raise DatabaseConnectionError(error_msg) from e
         
     except Exception as e:
-        # Check if this is an HTTPException (like 404) and re-raise it
-        if hasattr(e, 'status_code'):
-            # This is an HTTPException, re-raise it directly
-            raise e
-        
         # Other errors (network, configuration, etc.)
         error_msg = f"Connection error: {str(e)}"
         logger.error(error_msg)
@@ -291,7 +286,7 @@ def init_database():
             
     except Exception as e:
         logger.error(f"Error initializing database: {str(e)}")
-        raise
+        raise 
 
 # Auto-initialize database when module is imported
 if __name__ != "__main__":
