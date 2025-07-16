@@ -18,10 +18,16 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
 
   // Load user info if token exists
   useEffect(() => {
-    const token = typeof window !== "undefined" ? localStorage.getItem("token") : null;
+    const token = typeof window !== "undefined" ? localStorage.getItem("authToken") : null;
     if (token) {
       apiService.getCurrentUser()
-        .then(setUser)
+        .then(response => {
+          if (response.success && response.data) {
+            setUser(response.data);
+          } else {
+            setUser(null);
+          }
+        })
         .catch(() => setUser(null))
         .finally(() => setLoading(false));
     } else {
@@ -34,12 +40,15 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
   const login = async (credentials: { username: string; password: string }) => {
     setLoading(true);
     try {
-      // Ensure apiService is defined/imported at the top of the file
-      const data = await apiService.login(credentials);
-      if (data && data.access_token) {
-        localStorage.setItem("token", data.access_token);
-        const userInfo = await apiService.getCurrentUser();
-        setUser(userInfo);
+      const response = await apiService.login(credentials);
+      if (response.success && response.data && response.data.access_token) {
+        localStorage.setItem("authToken", response.data.access_token);
+        const userResponse = await apiService.getCurrentUser();
+        if (userResponse.success && userResponse.data) {
+          setUser(userResponse.data);
+        } else {
+          setUser(null);
+        }
       } else {
         setUser(null);
       }
@@ -54,15 +63,22 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
   // Signup function
   const signup = async (data: { username: string; password: string; email?: string }) => {
     setLoading(true);
-    await apiService.signup(data);
-    // Auto-login after signup
-    await login({ username: data.username, password: data.password });
-    setLoading(false);
+    try {
+      const response = await apiService.signup(data);
+      if (response.success) {
+        // Auto-login after signup
+        await login({ username: data.username, password: data.password });
+      }
+    } catch (error) {
+      console.error('Signup failed:', error);
+    } finally {
+      setLoading(false);
+    }
   };
 
   // Logout function
   const logout = () => {
-    localStorage.removeItem("token");
+    localStorage.removeItem("authToken");
     setUser(null);
     window.location.href = "/login";
   };

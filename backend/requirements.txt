@@ -3,14 +3,12 @@ uvicorn[standard]==0.24.0
 python-multipart==0.0.6
 python-jose[cryptography]==3.3.0
 passlib[bcrypt]==1.7.4
-SQLAlchemy==2.0.23
-alembic==1.13.0
-psycopg2-binary==2.9.9
-python-dotenv==1.0.0
-pydantic==2.5.0
+bcrypt==4.1.2
+pydantic[email]==2.5.0
+email-validator==2.1.0
+sqlitecloud==1.0.0
 requests==2.31.0
-aiofiles==23.2.1
-jinja2==3.1.2
+python-dotenv==1.0.0
 
 # Existing project dependencies
 jobspy==0.31.0

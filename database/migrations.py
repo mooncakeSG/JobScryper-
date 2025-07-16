@@ -345,6 +345,239 @@ class MigrationManager:
             migration_005_downgrade
         ))
         
+        # Migration 006: Add 2FA columns to users table
+        def migration_006_upgrade(session: Session) -> None:
+            """Add 2FA-related columns to users table."""
+            db_manager = get_database_manager()
+            
+            if db_manager.config.config['database_url'].startswith('sqlite'):
+                # SQLite doesn't support ADD COLUMN with DEFAULT in ALTER TABLE
+                try:
+                    # Check if columns already exist
+                    result = session.execute(text("PRAGMA table_info(users)"))
+                    columns = [row[1] for row in result.fetchall()]
+                    
+                    # Add two_fa_secret column if it doesn't exist
+                    if 'two_fa_secret' not in columns:
+                        session.execute(text("""
+                            ALTER TABLE users 
+                            ADD COLUMN two_fa_secret TEXT
+                        """))
+                        logger.info("Added two_fa_secret column to users table")
+                    
+                    # Add backup_codes column if it doesn't exist
+                    if 'backup_codes' not in columns:
+                        session.execute(text("""
+                            ALTER TABLE users 
+                            ADD COLUMN backup_codes TEXT
+                        """))
+                        logger.info("Added backup_codes column to users table")
+                    
+                    # Add email_verification_code column if it doesn't exist
+                    if 'email_verification_code' not in columns:
+                        session.execute(text("""
+                            ALTER TABLE users 
+                            ADD COLUMN email_verification_code TEXT
+                        """))
+                        logger.info("Added email_verification_code column to users table")
+                    
+                    # Add email_verification_expires column if it doesn't exist
+                    if 'email_verification_expires' not in columns:
+                        session.execute(text("""
+                            ALTER TABLE users 
+                            ADD COLUMN email_verification_expires DATETIME
+                        """))
+                        logger.info("Added email_verification_expires column to users table")
+                    
+                    # Add email_verified column if it doesn't exist
+                    if 'email_verified' not in columns:
+                        session.execute(text("""
+                            ALTER TABLE users 
+                            ADD COLUMN email_verified BOOLEAN DEFAULT FALSE
+                        """))
+                        logger.info("Added email_verified column to users table")
+                    
+                    # Add social_provider column if it doesn't exist
+                    if 'social_provider' not in columns:
+                        session.execute(text("""
+                            ALTER TABLE users 
+                            ADD COLUMN social_provider TEXT
+                        """))
+                        logger.info("Added social_provider column to users table")
+                    
+                    # Add social_id column if it doesn't exist
+                    if 'social_id' not in columns:
+                        session.execute(text("""
+                            ALTER TABLE users 
+                            ADD COLUMN social_id TEXT
+                        """))
+                        logger.info("Added social_id column to users table")
+                    
+                    # Add profile_picture column if it doesn't exist
+                    if 'profile_picture' not in columns:
+                        session.execute(text("""
+                            ALTER TABLE users 
+                            ADD COLUMN profile_picture TEXT
+                        """))
+                        logger.info("Added profile_picture column to users table")
+                    
+                    # Add failed_login_attempts column if it doesn't exist
+                    if 'failed_login_attempts' not in columns:
+                        session.execute(text("""
+                            ALTER TABLE users 
+                            ADD COLUMN failed_login_attempts INTEGER DEFAULT 0
+                        """))
+                        logger.info("Added failed_login_attempts column to users table")
+                    
+                    # Add password_changed_at column if it doesn't exist
+                    if 'password_changed_at' not in columns:
+                        session.execute(text("""
+                            ALTER TABLE users 
+                            ADD COLUMN password_changed_at DATETIME
+                        """))
+                        logger.info("Added password_changed_at column to users table")
+                        
+                except Exception as e:
+                    logger.error(f"Error adding 2FA columns: {e}")
+                    raise
+            else:
+                # PostgreSQL supports ADD COLUMN with DEFAULT
+                session.execute(text("""
+                    ALTER TABLE users 
+                    ADD COLUMN IF NOT EXISTS two_fa_secret TEXT
+                """))
+                session.execute(text("""
+                    ALTER TABLE users 
+                    ADD COLUMN IF NOT EXISTS backup_codes TEXT
+                """))
+                session.execute(text("""
+                    ALTER TABLE users 
+                    ADD COLUMN IF NOT EXISTS email_verification_code TEXT
+                """))
+                session.execute(text("""
+                    ALTER TABLE users 
+                    ADD COLUMN IF NOT EXISTS email_verification_expires TIMESTAMP WITH TIME ZONE
+                """))
+                session.execute(text("""
+                    ALTER TABLE users 
+                    ADD COLUMN IF NOT EXISTS email_verified BOOLEAN DEFAULT FALSE
+                """))
+                session.execute(text("""
+                    ALTER TABLE users 
+                    ADD COLUMN IF NOT EXISTS social_provider TEXT
+                """))
+                session.execute(text("""
+                    ALTER TABLE users 
+                    ADD COLUMN IF NOT EXISTS social_id TEXT
+                """))
+                session.execute(text("""
+                    ALTER TABLE users 
+                    ADD COLUMN IF NOT EXISTS profile_picture TEXT
+                """))
+                session.execute(text("""
+                    ALTER TABLE users 
+                    ADD COLUMN IF NOT EXISTS failed_login_attempts INTEGER DEFAULT 0
+                """))
+                session.execute(text("""
+                    ALTER TABLE users 
+                    ADD COLUMN IF NOT EXISTS password_changed_at TIMESTAMP WITH TIME ZONE
+                """))
+        
+        def migration_006_downgrade(session: Session) -> None:
+            """Remove 2FA columns from users table."""
+            db_manager = get_database_manager()
+            
+            if db_manager.config.config['database_url'].startswith('sqlite'):
+                # SQLite doesn't support DROP COLUMN directly
+                logger.warning("SQLite DROP COLUMN not supported - manual intervention required")
+            else:
+                session.execute(text("ALTER TABLE users DROP COLUMN IF EXISTS two_fa_secret"))
+                session.execute(text("ALTER TABLE users DROP COLUMN IF EXISTS backup_codes"))
+                session.execute(text("ALTER TABLE users DROP COLUMN IF EXISTS email_verification_code"))
+                session.execute(text("ALTER TABLE users DROP COLUMN IF EXISTS email_verification_expires"))
+                session.execute(text("ALTER TABLE users DROP COLUMN IF EXISTS email_verified"))
+                session.execute(text("ALTER TABLE users DROP COLUMN IF EXISTS social_provider"))
+                session.execute(text("ALTER TABLE users DROP COLUMN IF EXISTS social_id"))
+                session.execute(text("ALTER TABLE users DROP COLUMN IF EXISTS profile_picture"))
+                session.execute(text("ALTER TABLE users DROP COLUMN IF EXISTS failed_login_attempts"))
+                session.execute(text("ALTER TABLE users DROP COLUMN IF EXISTS password_changed_at"))
+        
+        self.migrations.append(Migration(
+            "006",
+            "Add 2FA and authentication enhancement columns to users table",
+            migration_006_upgrade,
+            migration_006_downgrade
+        ))
+        
+        # Migration 007: Add password reset tokens table
+        def migration_007_upgrade(session: Session) -> None:
+            """Create password reset tokens table."""
+            db_manager = get_database_manager()
+            
+            if db_manager.config.config['database_url'].startswith('sqlite'):
+                session.execute(text("""
+                    CREATE TABLE IF NOT EXISTS password_reset_tokens (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        user_id INTEGER NOT NULL,
+                        token_hash TEXT UNIQUE NOT NULL,
+                        expires_at DATETIME NOT NULL,
+                        used_at DATETIME,
+                        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                        FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+                    )
+                """))
+                
+                # Create indexes
+                session.execute(text("""
+                    CREATE INDEX IF NOT EXISTS ix_password_reset_tokens_hash 
+                    ON password_reset_tokens(token_hash)
+                """))
+                session.execute(text("""
+                    CREATE INDEX IF NOT EXISTS ix_password_reset_tokens_user 
+                    ON password_reset_tokens(user_id)
+                """))
+                session.execute(text("""
+                    CREATE INDEX IF NOT EXISTS ix_password_reset_tokens_expires 
+                    ON password_reset_tokens(expires_at)
+                """))
+            else:
+                session.execute(text("""
+                    CREATE TABLE IF NOT EXISTS password_reset_tokens (
+                        id SERIAL PRIMARY KEY,
+                        user_id INTEGER NOT NULL,
+                        token_hash TEXT UNIQUE NOT NULL,
+                        expires_at TIMESTAMP WITH TIME ZONE NOT NULL,
+                        used_at TIMESTAMP WITH TIME ZONE,
+                        created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+                        FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+                    )
+                """))
+                
+                # Create indexes
+                session.execute(text("""
+                    CREATE INDEX CONCURRENTLY IF NOT EXISTS ix_password_reset_tokens_hash 
+                    ON password_reset_tokens(token_hash)
+                """))
+                session.execute(text("""
+                    CREATE INDEX CONCURRENTLY IF NOT EXISTS ix_password_reset_tokens_user 
+                    ON password_reset_tokens(user_id)
+                """))
+                session.execute(text("""
+                    CREATE INDEX CONCURRENTLY IF NOT EXISTS ix_password_reset_tokens_expires 
+                    ON password_reset_tokens(expires_at)
+                """))
+        
+        def migration_007_downgrade(session: Session) -> None:
+            """Remove password reset tokens table."""
+            session.execute(text("DROP TABLE IF EXISTS password_reset_tokens"))
+        
+        self.migrations.append(Migration(
+            "007",
+            "Add password reset tokens table",
+            migration_007_upgrade,
+            migration_007_downgrade
+        ))
+        
         # Sort migrations by version
         self.migrations.sort(key=lambda m: m.version)
     

@@ -9,6 +9,9 @@ import logging
 from contextlib import contextmanager
 from typing import Generator, Optional
 from urllib.parse import urlparse
+import psycopg2
+import psycopg2.extras
+from fastapi import HTTPException
 
 # Try to import psycopg2 for PostgreSQL support
 try:
@@ -43,12 +46,9 @@ def cloud_db_connection() -> Generator:
     cursor = None
     
     try:
-        # Get database URL from environment
-        database_url = os.environ.get("DATABASE_URL")
-        if not database_url:
-            # Default to SQLite for local development
-            database_url = "sqlite:///auto_applyer.db"
-            logger.info("DATABASE_URL not set, using default SQLite database")
+        # Always use SQLite Cloud
+        database_url = "sqlitecloud://czdyoyrynz.g4.sqlite.cloud:8860/auto-applyer?apikey=3KWvb3v84ZydV0FLHM6PDL2taY9NyOdaZiZ7QnPQKNM"
+        logger.info("Using SQLite Cloud database")
         
         # Parse the database URL
         parsed_url = urlparse(database_url)
@@ -90,10 +90,23 @@ def cloud_db_connection() -> Generator:
                 cursor_factory=psycopg2.extras.RealDictCursor
             )
             
+        elif db_type == "sqlitecloud":
+            # SQLite Cloud connection
+            try:
+                import sqlitecloud
+                logger.debug(f"Connecting to SQLite Cloud database: {database_url}")
+                connection = sqlitecloud.connect(database_url)
+                # SQLite Cloud doesn't support row_factory, so we'll handle it differently
+            except ImportError:
+                raise DatabaseNotSupportedError(
+                    "SQLite Cloud support requires sqlitecloud. "
+                    "Install with: pip install sqlitecloud"
+                )
+            
         else:
             raise DatabaseNotSupportedError(
                 f"Unsupported database type: {db_type}. "
-                "Supported types: sqlite, postgresql, postgres"
+                "Supported types: sqlite, postgresql, postgres, sqlitecloud"
             )
         
         logger.debug("Database connection established successfully")
@@ -111,7 +124,7 @@ def cloud_db_connection() -> Generator:
                 connection.commit()
                 logger.debug("Database changes committed")
             
-    except (sqlite3.Error, psycopg2.Error) as e:
+    except (sqlite3.Error, psycopg2.Error, Exception) as e:
         # Database-specific errors
         error_msg = f"Database error: {str(e)}"
         logger.error(error_msg)
@@ -126,6 +139,10 @@ def cloud_db_connection() -> Generator:
                 connection.rollback()
                 logger.debug("Database changes rolled back")
         raise DatabaseConnectionError(error_msg) from e
+        
+    except HTTPException:
+        # Re-raise HTTPException without wrapping it
+        raise
         
     except Exception as e:
         # Other errors (network, configuration, etc.)
@@ -171,11 +188,12 @@ def fetch_user_by_username_or_email(identifier: str) -> Optional[tuple]:
         tuple: User data (id, username, email, ...) or None if not found
     """
     try:
-        with cloud_db_connection() as cursor:
+        with cloud_db_connection() as conn:
+            cursor = conn.cursor()
             # Try to find user by username or email
             cursor.execute("""
-                SELECT id, username, email, password_hash, resume_text, 
-                       created_at, updated_at, is_verified, two_fa_enabled
+                SELECT id, username, password_hash, email, is_active, is_verified, 
+                       created_at, resume_text
                 FROM users 
                 WHERE username = ? OR email = ?
             """, (identifier, identifier))
@@ -200,10 +218,11 @@ def create_user(username: str, email: str, password_hash: str) -> Optional[int]:
         int: User ID if successful, None otherwise
     """
     try:
-        with cloud_db_connection() as cursor:
+        with cloud_db_connection() as conn:
+            cursor = conn.cursor()
             cursor.execute("""
-                INSERT INTO users (username, email, password_hash, created_at, updated_at)
-                VALUES (?, ?, ?, datetime('now'), datetime('now'))
+                INSERT INTO users (username, email, password_hash, created_at, is_verified, is_active)
+                VALUES (?, ?, ?, datetime('now'), 0, 1)
             """, (username, email, password_hash))
             
             return cursor.lastrowid
@@ -224,10 +243,11 @@ def update_user_resume_text(user_id: int, resume_text: str) -> bool:
         bool: True if successful, False otherwise
     """
     try:
-        with cloud_db_connection() as cursor:
+        with cloud_db_connection() as conn:
+            cursor = conn.cursor()
             cursor.execute("""
                 UPDATE users 
-                SET resume_text = ?, updated_at = datetime('now')
+                SET resume_text = ?
                 WHERE id = ?
             """, (resume_text, user_id))
             
@@ -241,7 +261,8 @@ def update_user_resume_text(user_id: int, resume_text: str) -> bool:
 def init_database():
     """Initialize database tables if they don't exist."""
     try:
-        with cloud_db_connection() as cursor:
+        with cloud_db_connection() as conn:
+            cursor = conn.cursor()
             # Create users table
             cursor.execute("""
                 CREATE TABLE IF NOT EXISTS users (
@@ -253,32 +274,119 @@ def init_database():
                     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
                     updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
                     is_verified BOOLEAN DEFAULT FALSE,
-                    two_fa_enabled BOOLEAN DEFAULT FALSE
+                    two_fa_enabled BOOLEAN DEFAULT FALSE,
+                    two_fa_secret TEXT,
+                    backup_codes TEXT,
+                    email_verification_code TEXT,
+                    email_verification_expires DATETIME,
+                    email_verified BOOLEAN DEFAULT FALSE,
+                    social_provider TEXT,
+                    social_id TEXT,
+                    profile_picture TEXT,
+                    failed_login_attempts INTEGER DEFAULT 0,
+                    password_changed_at DATETIME,
+                    last_login DATETIME
                 )
             """)
             
-            # Create applications table
+            # Create job_applications table (renamed from applications)
             cursor.execute("""
-                CREATE TABLE IF NOT EXISTS applications (
+                CREATE TABLE IF NOT EXISTS job_applications (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
                     user_id INTEGER NOT NULL,
                     job_title TEXT NOT NULL,
                     company TEXT NOT NULL,
                     location TEXT,
-                    status TEXT DEFAULT 'pending',
+                    status TEXT DEFAULT 'applied',
+                    application_date DATETIME DEFAULT CURRENT_TIMESTAMP,
                     salary_min INTEGER,
                     salary_max INTEGER,
                     job_url TEXT,
+                    interview_date DATETIME,
                     notes TEXT,
+                    match_score FLOAT DEFAULT 0,
                     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
                     updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
                     FOREIGN KEY (user_id) REFERENCES users (id)
                 )
             """)
             
+            # Create saved_jobs table
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS saved_jobs (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    user_id INTEGER NOT NULL,
+                    job_id TEXT,
+                    job_url TEXT,
+                    job_data TEXT NOT NULL,
+                    saved_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                    FOREIGN KEY (user_id) REFERENCES users (id)
+                )
+            """)
+            
+            # Create user_preferences table
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS user_preferences (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    user_id INTEGER NOT NULL UNIQUE,
+                    preferred_job_titles TEXT,
+                    preferred_locations TEXT,
+                    preferred_job_types TEXT,
+                    salary_min INTEGER,
+                    salary_max INTEGER,
+                    salary_currency TEXT DEFAULT 'USD',
+                    remote_work_preference BOOLEAN DEFAULT FALSE,
+                    max_results_per_search INTEGER DEFAULT 50,
+                    auto_apply_enabled BOOLEAN DEFAULT FALSE,
+                    job_sources TEXT,
+                    email_notifications BOOLEAN DEFAULT TRUE,
+                    application_reminders BOOLEAN DEFAULT TRUE,
+                    daily_job_alerts BOOLEAN DEFAULT FALSE,
+                    ai_suggestions_enabled BOOLEAN DEFAULT TRUE,
+                    ats_analysis_enabled BOOLEAN DEFAULT TRUE,
+                    auto_resume_optimization BOOLEAN DEFAULT FALSE,
+                    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                    FOREIGN KEY (user_id) REFERENCES users (id)
+                )
+            """)
+            
+            # Create activities table
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS activities (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    user_id INTEGER NOT NULL,
+                    activity_type TEXT NOT NULL,
+                    title TEXT NOT NULL,
+                    description TEXT,
+                    entity_type TEXT,
+                    entity_id INTEGER,
+                    activity_metadata TEXT,
+                    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                    FOREIGN KEY (user_id) REFERENCES users (id)
+                )
+            """)
+            
+            # Create password_reset_tokens table
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS password_reset_tokens (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    user_id INTEGER NOT NULL,
+                    token_hash TEXT UNIQUE NOT NULL,
+                    expires_at DATETIME NOT NULL,
+                    used_at DATETIME,
+                    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                    FOREIGN KEY (user_id) REFERENCES users (id)
+                )
+            """)
+            
             # Create indexes for better performance
-            cursor.execute("CREATE INDEX IF NOT EXISTS idx_applications_user_id ON applications(user_id)")
-            cursor.execute("CREATE INDEX IF NOT EXISTS idx_applications_status ON applications(status)")
+            cursor.execute("CREATE INDEX IF NOT EXISTS idx_job_applications_user_id ON job_applications(user_id)")
+            cursor.execute("CREATE INDEX IF NOT EXISTS idx_job_applications_status ON job_applications(status)")
+            cursor.execute("CREATE INDEX IF NOT EXISTS idx_saved_jobs_user_id ON saved_jobs(user_id)")
+            cursor.execute("CREATE INDEX IF NOT EXISTS idx_user_preferences_user_id ON user_preferences(user_id)")
+            cursor.execute("CREATE INDEX IF NOT EXISTS idx_activities_user_id ON activities(user_id)")
+            cursor.execute("CREATE INDEX IF NOT EXISTS idx_password_reset_tokens_hash ON password_reset_tokens(token_hash)")
             cursor.execute("CREATE INDEX IF NOT EXISTS idx_users_username ON users(username)")
             cursor.execute("CREATE INDEX IF NOT EXISTS idx_users_email ON users(email)")
             

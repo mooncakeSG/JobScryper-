@@ -73,13 +73,18 @@ export default function UploadPage() {
 
     try {
       const result = await apiService.analyzeResume(file);
-      setAnalysis(result);
       
-      // Log activity
-      try {
-        await activityService.logResumeUploaded();
-      } catch (activityError) {
-        console.error('Error logging activity:', activityError);
+      if (result.success && result.data) {
+        setAnalysis(result.data);
+        
+        // Log activity
+        try {
+          await activityService.logResumeUploaded();
+        } catch (activityError) {
+          console.error('Error logging activity:', activityError);
+        }
+      } else {
+        setError(result.error || "Failed to analyze resume. Please try again.");
       }
     } catch (err) {
       setError("Failed to analyze resume. Please try again.");
@@ -211,7 +216,7 @@ export default function UploadPage() {
                 </div>
 
                 {/* Strengths */}
-                {analysis.strengths.length > 0 && (
+                {analysis.strengths && analysis.strengths.length > 0 && (
                   <div>
                     <h3 className="font-semibold text-green-700 mb-2 text-base">Strengths</h3>
                     <ul className="space-y-2">
@@ -226,7 +231,7 @@ export default function UploadPage() {
                 )}
 
                 {/* Suggestions */}
-                {analysis.suggestions.length > 0 && (
+                {analysis.suggestions && analysis.suggestions.length > 0 && (
                   <div>
                     <h3 className="font-semibold text-blue-700 mb-2 text-base">Suggestions</h3>
                     <ul className="space-y-2">
@@ -241,7 +246,7 @@ export default function UploadPage() {
                 )}
 
                 {/* Keywords */}
-                {analysis.keywords.length > 0 && (
+                {analysis.keywords && analysis.keywords.length > 0 && (
                   <div>
                     <h3 className="font-semibold text-purple-700 mb-2 text-base">Key Skills Found</h3>
                     <div className="flex flex-wrap gap-2">

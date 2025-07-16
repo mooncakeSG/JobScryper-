@@ -106,52 +106,43 @@ export default function MatchPage() {
 
   useEffect(() => {
     // Fetch saved jobs on mount
-    apiService.getSavedJobs('demo').then((saved) => {
-      const savedMap: { [id: string]: boolean } = {};
-      saved.forEach((job: any) => {
-        if (job.id) savedMap[job.id] = true;
-        else if (job.url) savedMap[job.url] = true;
-      });
-      setSavedJobs(savedMap);
+    apiService.getSavedJobs().then((response) => {
+      if (response.success && response.data) {
+        const savedJobs = Array.isArray(response.data) ? response.data : [];
+        const savedMap: { [id: string]: boolean } = {};
+        savedJobs.forEach((job: any) => {
+          if (job.id) savedMap[job.id] = true;
+          else if (job.url) savedMap[job.url] = true;
+        });
+        setSavedJobs(savedMap);
+      }
+    }).catch((error) => {
+      console.error('Error fetching saved jobs:', error);
     });
-    setIsLoggedIn(!!localStorage.getItem("token"));
+    setIsLoggedIn(!!localStorage.getItem("authToken"));
   }, []);
 
   const searchJobs = async () => {
     setLoading(true);
     try {
-      const token = localStorage.getItem("token");
-      const params = new URLSearchParams({
+      const response = await apiService.searchJobs({
         query: searchTerm,
         location: location,
-        jobType: filters.jobType,
-        minSalary: filters.minSalary,
+        job_type: filters.jobType,
+        min_salary: filters.minSalary,
         company: filters.company
       });
-      const headers: Record<string, string> = {};
-      if (token) headers["Authorization"] = `Bearer ${token}`;
-      const response = await fetch(`/api/match?${params.toString()}`, {
-        headers,
-      });
-      let data;
-      try {
-        data = await response.json();
-      } catch (err) {
-        setToast("Server returned invalid response. Please try again.");
-        setJobs([]);
-        setLoading(false);
-        return;
-      }
-      if (!response.ok) {
-        if (data.detail === "Not authenticated") {
+      
+      if (response.success && response.data) {
+        setJobs(Array.isArray(response.data.jobs) ? response.data.jobs : []);
+        setToast("");
+      } else {
+        if (response.error === "Not authenticated") {
           setToast("You must be logged in to search for jobs.");
         } else {
-          setToast(data.detail || "Failed to fetch jobs");
+          setToast(response.error || "Failed to fetch jobs");
         }
         setJobs([]);
-      } else {
-        setJobs(Array.isArray(data.jobs) ? data.jobs : []); // Ensure jobs is always an array
-        setToast("");
       }
     } catch (err: any) {
       setToast("Network error or backend unavailable. Please try again later.");
@@ -223,15 +214,29 @@ export default function MatchPage() {
   const handleSave = async (job: any) => {
     setSavingId(job.id);
     try {
-      await apiService.saveJob(job, 'demo');
-      setSavedJobs(prev => ({ ...prev, [job.id]: true }));
-      setToast("Job saved!");
+      const response = await apiService.saveJob({
+        title: job.title,
+        company: job.company,
+        location: job.location,
+        description: job.description,
+        salary_min: job.salary?.min,
+        salary_max: job.salary?.max,
+        job_url: job.url,
+        source: job.source
+      });
       
-      // Log activity
-      try {
-        await activityService.logJobSaved(job.title, job.company, job.id);
-      } catch (activityError) {
-        console.error('Error logging activity:', activityError);
+      if (response.success) {
+        setSavedJobs(prev => ({ ...prev, [job.id]: true }));
+        setToast("Job saved!");
+        
+        // Log activity
+        try {
+          await activityService.logJobSaved(job.title, job.company, job.id);
+        } catch (activityError) {
+          console.error('Error logging activity:', activityError);
+        }
+      } else {
+        setToast("Failed to save job.");
       }
     } catch (err) {
       setToast("Failed to save job.");

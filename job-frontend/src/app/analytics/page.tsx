@@ -58,7 +58,7 @@ export default function AnalyticsPage() {
         setStats([
           {
             title: "Total Applications",
-            value: data.total_applications,
+            value: data.total_applications || 0,
             change: `+${data.monthly_applications?.[0]?.applications || 0}`,
             trend: "up",
             icon: FileText,
@@ -66,23 +66,23 @@ export default function AnalyticsPage() {
           },
           {
             title: "Interview Rate",
-            value: `${data.interview_rate}%`,
-            change: `+${data.interview_rate}%`,
+            value: `${data.interview_rate || 0}%`,
+            change: `+${data.interview_rate || 0}%`,
             trend: "up",
             icon: Users,
             color: "text-green-600"
           },
           {
             title: "Response Rate",
-            value: `${data.response_rate}%`,
-            change: `+${data.response_rate}%`,
+            value: `${data.response_rate || 0}%`,
+            change: `+${data.response_rate || 0}%`,
             trend: "up",
             icon: Target,
             color: "text-purple-600"
           },
           {
             title: "Avg. Response Time",
-            value: `${data.avg_response_time} days`,
+            value: `${data.avg_response_time || 0} days`,
             change: "",
             trend: "up",
             icon: Clock,

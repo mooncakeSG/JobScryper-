@@ -37,29 +37,29 @@ export default function Dashboard() {
         setStats([
           {
             title: "Total Applications",
-            value: data.total_applications,
+            value: data.total_applications || 0,
             change: `+${data.monthly_applications?.[0]?.applications || 0} this month`,
             icon: FileText,
             color: "text-blue-600"
           },
           {
             title: "Interview Rate",
-            value: `${data.interview_rate}%`,
-            change: `+${data.interview_rate}% from last month`,
+            value: `${data.interview_rate || 0}%`,
+            change: `+${data.interview_rate || 0}% from last month`,
             icon: TrendingUp,
             color: "text-green-600"
           },
           {
             title: "Response Rate",
-            value: `${data.response_rate}%`,
-            change: `+${data.response_rate}% from last month`,
+            value: `${data.response_rate || 0}%`,
+            change: `+${data.response_rate || 0}% from last month`,
             icon: Users,
             color: "text-purple-600"
           },
           {
             title: "Success Rate",
-            value: `${data.response_rate}%`,
-            change: `+${data.response_rate}% from last month`,
+            value: `${data.response_rate || 0}%`,
+            change: `+${data.response_rate || 0}% from last month`,
             icon: BarChart3,
             color: "text-orange-600"
           }

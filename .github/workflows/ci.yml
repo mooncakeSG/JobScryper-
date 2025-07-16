@@ -1,0 +1,206 @@
+name: CI/CD Pipeline
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main, develop ]
+
+env:
+  PYTHON_VERSION: '3.11'
+  NODE_VERSION: '18'
+
+jobs:
+  backend-tests:
+    runs-on: ubuntu-latest
+    name: Backend Tests
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Set up Python ${{ env.PYTHON_VERSION }}
+      uses: actions/setup-python@v4
+      with:
+        python-version: ${{ env.PYTHON_VERSION }}
+    
+    - name: Cache pip dependencies
+      uses: actions/cache@v3
+      with:
+        path: ~/.cache/pip
+        key: ${{ runner.os }}-pip-${{ hashFiles('**/requirements.txt') }}
+        restore-keys: |
+          ${{ runner.os }}-pip-
+    
+    - name: Install Python dependencies
+      run: |
+        cd "Auto Applyer"
+        python -m pip install --upgrade pip
+        pip install -r backend/requirements.txt
+        pip install pytest pytest-cov pytest-asyncio
+    
+    - name: Run backend tests
+      run: |
+        cd "Auto Applyer"
+        python -m pytest tests/ -v --cov=backend --cov-report=xml
+    
+    - name: Upload coverage to Codecov
+      uses: codecov/codecov-action@v3
+      with:
+        file: ./Auto Applyer/coverage.xml
+        flags: backend
+        name: backend-coverage
+
+  frontend-tests:
+    runs-on: ubuntu-latest
+    name: Frontend Tests
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Set up Node.js ${{ env.NODE_VERSION }}
+      uses: actions/setup-node@v4
+      with:
+        node-version: ${{ env.NODE_VERSION }}
+        cache: 'npm'
+        cache-dependency-path: 'Auto Applyer/job-frontend/package-lock.json'
+    
+    - name: Install frontend dependencies
+      run: |
+        cd "Auto Applyer/job-frontend"
+        npm ci
+    
+    - name: Run frontend linting
+      run: |
+        cd "Auto Applyer/job-frontend"
+        npm run lint
+    
+    - name: Build frontend
+      run: |
+        cd "Auto Applyer/job-frontend"
+        npm run build
+    
+    - name: Install Playwright browsers
+      run: |
+        cd "Auto Applyer/job-frontend"
+        npx playwright install --with-deps
+    
+    - name: Run Playwright tests
+      run: |
+        cd "Auto Applyer/job-frontend"
+        npm run test
+      env:
+        CI: true
+
+  e2e-tests:
+    runs-on: ubuntu-latest
+    name: E2E Tests
+    needs: [backend-tests, frontend-tests]
+    
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: test_db
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Set up Python ${{ env.PYTHON_VERSION }}
+      uses: actions/setup-python@v4
+      with:
+        python-version: ${{ env.PYTHON_VERSION }}
+    
+    - name: Set up Node.js ${{ env.NODE_VERSION }}
+      uses: actions/setup-node@v4
+      with:
+        node-version: ${{ env.NODE_VERSION }}
+        cache: 'npm'
+        cache-dependency-path: 'Auto Applyer/job-frontend/package-lock.json'
+    
+    - name: Install dependencies
+      run: |
+        cd "Auto Applyer"
+        pip install -r backend/requirements.txt
+        pip install pytest pytest-asyncio
+        cd job-frontend
+        npm ci
+        npx playwright install --with-deps
+    
+    - name: Start backend server
+      run: |
+        cd "Auto Applyer"
+        python -m uvicorn backend.main:app --host 0.0.0.0 --port 8000 &
+        sleep 10
+      env:
+        DATABASE_URL: postgresql://postgres:postgres@localhost:5432/test_db
+    
+    - name: Start frontend server
+      run: |
+        cd "Auto Applyer/job-frontend"
+        npm run dev &
+        sleep 30
+      env:
+        NEXT_PUBLIC_API_URL: http://localhost:8000
+    
+    - name: Run E2E tests
+      run: |
+        cd "Auto Applyer/job-frontend"
+        npm run test:e2e
+      env:
+        CI: true
+
+  security-scan:
+    runs-on: ubuntu-latest
+    name: Security Scan
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Run Bandit security scan
+      uses: python-security/bandit@main
+      with:
+        args: -r "Auto Applyer/backend/" -f json -o bandit-report.json
+    
+    - name: Run npm audit
+      run: |
+        cd "Auto Applyer/job-frontend"
+        npm audit --audit-level moderate
+
+  deploy-staging:
+    runs-on: ubuntu-latest
+    name: Deploy to Staging
+    needs: [backend-tests, frontend-tests, e2e-tests, security-scan]
+    if: github.ref == 'refs/heads/develop'
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Deploy to staging environment
+      run: |
+        echo "Deploying to staging..."
+        # Add your staging deployment commands here
+        # Example: docker-compose up -d
+
+  deploy-production:
+    runs-on: ubuntu-latest
+    name: Deploy to Production
+    needs: [backend-tests, frontend-tests, e2e-tests, security-scan]
+    if: github.ref == 'refs/heads/main'
+    environment: production
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Deploy to production environment
+      run: |
+        echo "Deploying to production..."
+        # Add your production deployment commands here
+        # Example: docker-compose -f docker-compose.prod.yml up -d 

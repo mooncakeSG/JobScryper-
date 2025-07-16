@@ -184,10 +184,10 @@ export default function ApplicationsPage() {
     try {
       setLoading(true);
       const data = await apiService.getApplications();
-      setApplications(data);
+      setApplications(Array.isArray(data) ? data : []);
       success(
         "Applications loaded",
-        `Successfully loaded ${data.length} applications`
+        `Successfully loaded ${Array.isArray(data) ? data.length : 0} applications`
       );
     } catch (err: any) {
       console.error('Error fetching applications:', err);
