@@ -1,0 +1,69 @@
+version: '3.8'
+
+services:
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: jobscryper-backend
+    ports:
+      - "8000:8000"
+    environment:
+      - PYTHONPATH=/app
+      - ENVIRONMENT=production
+    volumes:
+      - ./data:/app/data
+      - ./logs:/app/logs
+    networks:
+      - jobscryper-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  frontend:
+    build:
+      context: ./job-frontend
+      dockerfile: Dockerfile
+    container_name: jobscryper-frontend
+    ports:
+      - "3000:3000"
+    environment:
+      - NODE_ENV=production
+      - NEXT_PUBLIC_API_URL=http://localhost:8000
+    depends_on:
+      backend:
+        condition: service_healthy
+    networks:
+      - jobscryper-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  # Optional: Add a database service for production
+  # postgres:
+  #   image: postgres:15-alpine
+  #   container_name: jobscryper-db
+  #   environment:
+  #     POSTGRES_DB: jobscryper
+  #     POSTGRES_USER: jobscryper
+  #     POSTGRES_PASSWORD: ${DB_PASSWORD:-changeme}
+  #   volumes:
+  #     - postgres_data:/var/lib/postgresql/data
+  #   networks:
+  #     - jobscryper-network
+  #   restart: unless-stopped
+
+networks:
+  jobscryper-network:
+    driver: bridge
+
+volumes:
+  postgres_data: 

@@ -1,0 +1,27 @@
+# Enhanced UI Requirements for Auto Applyer
+# Additional packages for modern UI components and visualization
+
+# Data visualization and charting
+plotly>=5.17.0
+altair>=5.0.0
+
+# Excel export functionality
+openpyxl>=3.1.0
+xlsxwriter>=3.1.0
+
+# Enhanced Streamlit components
+streamlit-aggrid>=0.3.4
+streamlit-option-menu>=0.3.6
+streamlit-elements>=0.1.0
+
+# Date/time handling
+python-dateutil>=2.8.2
+
+# Progress bars and indicators
+tqdm>=4.66.0
+
+# Additional styling and icons
+pillow>=10.0.0
+
+# Enhanced data handling
+pyarrow>=13.0.0 

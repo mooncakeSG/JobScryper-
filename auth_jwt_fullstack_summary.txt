@@ -1,0 +1,193 @@
+# Full-Stack JWT Authentication Architecture (FastAPI + Next.js)
+
+---
+
+## 1. Backend (FastAPI) – JWT Auth
+
+a. **Login Endpoint (Token Generation)**
+```python
+from fastapi import FastAPI, HTTPException, Depends
+from fastapi.security import OAuth2PasswordRequestForm, OAuth2PasswordBearer
+from jose import jwt, JWTError
+from datetime import datetime, timedelta
+
+app = FastAPI()
+SECRET_KEY = "your_secret_key"
+ALGORITHM = "HS256"
+ACCESS_TOKEN_EXPIRE_MINUTES = 60
+
+def create_access_token(data: dict, expires_delta: timedelta = None):
+    to_encode = data.copy()
+    expire = datetime.utcnow() + (expires_delta or timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES))
+    to_encode.update({"exp": expire})
+    return jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
+
+@app.post("/api/auth/login")
+def login(form_data: OAuth2PasswordRequestForm = Depends()):
+    # Replace with your user lookup and password check
+    user = get_user_from_db(form_data.username)
+    if not user or not verify_password(form_data.password, user["hashed_password"]):
+        raise HTTPException(status_code=401, detail="Incorrect username or password")
+    access_token = create_access_token(data={"sub": user["id"]})
+    return {"access_token": access_token, "token_type": "bearer"}
+```
+
+b. **Token Verification Middleware**
+```python
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/auth/login")
+
+def get_current_user(token: str = Depends(oauth2_scheme)):
+    credentials_exception = HTTPException(status_code=401, detail="Could not validate credentials")
+    try:
+        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        user_id: str = payload.get("sub")
+        if user_id is None:
+            raise credentials_exception
+        # Fetch user from DB using user_id
+        user = get_user_by_id(user_id)
+        if user is None:
+            raise credentials_exception
+        return user
+    except JWTError:
+        raise credentials_exception
+```
+
+c. **Protected Route Example**
+```python
+@app.get("/api/dashboard")
+def get_dashboard(current_user: dict = Depends(get_current_user)):
+    # Use current_user['id'] to fetch user-specific data from SQLiteCloud
+    return {"username": current_user["username"], "dashboard_data": "real user data"}
+```
+
+---
+
+## 2. Frontend (Next.js/React) – JWT Handling
+
+a. **Login Function (Store Token)**
+```tsx
+// utils/auth.ts
+export async function login(username: string, password: string) {
+  const res = await fetch("/api/auth/login", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ username, password }),
+  });
+  const data = await res.json();
+  if (data.access_token) {
+    localStorage.setItem("token", data.access_token);
+    return true;
+  }
+  return false;
+}
+```
+
+b. **Fetch User Data with Token**
+```tsx
+export async function fetchDashboard() {
+  const token = localStorage.getItem("token");
+  const res = await fetch("/api/dashboard", {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (res.status === 401) {
+    // handle logout
+    localStorage.removeItem("token");
+    return null;
+  }
+  return res.json();
+}
+```
+
+c. **React Context for Auth State**
+```tsx
+import React, { createContext, useContext, useEffect, useState } from "react";
+const AuthContext = createContext(null);
+
+export function AuthProvider({ children }) {
+  const [user, setUser] = useState(null);
+
+  useEffect(() => {
+    const token = localStorage.getItem("token");
+    if (token) {
+      fetch("/api/auth/me", { headers: { Authorization: `Bearer ${token}` } })
+        .then(res => res.ok ? res.json() : null)
+        .then(setUser)
+        .catch(() => setUser(null));
+    }
+  }, []);
+
+  const logout = () => {
+    localStorage.removeItem("token");
+    setUser(null);
+  };
+
+  return (
+    <AuthContext.Provider value={{ user, setUser, logout }}>
+      {children}
+    </AuthContext.Provider>
+  );
+}
+export function useAuth() { return useContext(AuthContext); }
+```
+
+d. **Dashboard Component**
+```tsx
+import { useAuth } from "../context/AuthContext";
+import { useEffect, useState } from "react";
+import { fetchDashboard } from "../utils/auth";
+
+export default function Dashboard() {
+  const { user } = useAuth();
+  const [dashboard, setDashboard] = useState(null);
+
+  useEffect(() => {
+    if (user) {
+      fetchDashboard().then(setDashboard);
+    }
+  }, [user]);
+
+  if (!user) return <div>Please log in</div>;
+  if (!dashboard) return <div>Loading...</div>;
+  return (
+    <div>
+      <h1>Welcome, {user.username}</h1>
+      <pre>{JSON.stringify(dashboard, null, 2)}</pre>
+    </div>
+  );
+}
+```
+
+---
+
+## 3. Best Practices & Security Tips
+- **Prefer HttpOnly cookies** for storing JWTs in production (prevents XSS), but localStorage is OK for prototypes.
+- **Always check the token on every page load** (in context/provider).
+- **Backend should always verify the JWT** and extract the user ID from the payload.
+- **On logout, clear the token and user state.**
+- **Never trust the frontend for authentication/authorization.**
+
+---
+
+## 4. What Might Be Missing in Your Setup
+- Not fetching user info after login and storing it in context/state.
+- Not updating the UI based on the user state.
+- Not sending the JWT in the Authorization header for protected routes.
+- Not verifying the JWT on the backend for protected endpoints.
+
+---
+
+## Summary Table
+
+| Step                        | Implementation/Check                        |
+|-----------------------------|---------------------------------------------|
+| Backend login returns JWT    | ✅ (see FastAPI code above)                 |
+| Frontend stores JWT          | ✅ (localStorage or cookie)                 |
+| Frontend fetches user info   | ✅ (context/provider after login)           |
+| UI shows logged-in state     | ✅ (header/dashboard uses context)          |
+| Protected routes use JWT     | ✅ (Authorization: Bearer ...)              |
+| Backend verifies JWT         | ✅ (middleware/Depends)                     |
+| Mock data hidden after login | ✅ (dashboard checks user state)            |
+
+---
+
+**If you want, I can generate a minimal working repo or files for your exact stack. Let me know which part you want to see in full!** 

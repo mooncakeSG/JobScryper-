@@ -1,0 +1,100 @@
+KEAWIN KOESNEL
+UX/UI Designer | AI/ML Developer | Full-Stack Problem Solver
+
+Port Elizabeth/Gqeberha, South Africa
+GitHub: github.com/mooncakeSG
+Portfolio: mooncakesg.github.io
+Email:
+Phone:
+
+PROFESSIONAL SUMMARY
+
+Passionate UX/UI Designer and AI/ML Developer with hands-on experience in user-centered design, full-stack development, and ethical tech solutions. Currently advancing expertise through intensive AI bootcamp training while providing technical support and user experience optimization. Strong background in Python, JavaScript, and modern design frameworks with demonstrated ability to build and deploy production-ready applications that prioritize user experience and accessibility.
+
+TECHNICAL SKILLS
+
+Design & User Experience:
+• User Experience (UX) Design: User research methods, user journey mapping, persona development
+• User Interface (UI) Design: UI design principles, responsive design, accessibility standards
+• Wireframing Tools: Figma, Sketch, Adobe XD, Balsamiq
+• Prototyping Tools: InVision, Adobe XD, Figma, Marvel
+• User Testing: User feedback collection, usability testing, A/B testing
+• Design Thinking: Problem definition, ideation, prototyping, testing
+
+Development & Technical:
+• Frontend: JavaScript, React, HTML5, CSS3, Responsive Design
+• Backend: Python, FastAPI, SQL, API Development
+• AI/ML Tools: OpenAI, IBM Watson, Groq, Machine Learning
+• Cloud & Deployment: Cloud deployment, Agile collaboration
+• Support Tools: Linux, Remote Desktop, Ticketing Systems
+
+EXPERIENCE
+
+IT Support Associate & UX Consultant
+Various Organizations | Port Elizabeth, South Africa | 2024 - Present
+• Improved user experience for 200+ end users by redesigning IT support workflows, reducing resolution time by 40%
+• Conducted user research to identify pain points in existing systems and implemented user-centered solutions
+• Created wireframes and prototypes for internal tools, resulting in 30% increase in user satisfaction
+• Collaborated with cross-functional teams to ensure technical solutions aligned with user needs and business objectives
+• Implemented responsive design principles for internal dashboards, improving mobile usability by 60%
+
+AI/ML Developer & User Experience Researcher
+Personal & Bootcamp Projects | Port Elizabeth, South Africa | 2025 - Present
+• Developed SmartHarvest application with focus on intuitive user interface and seamless user experience
+• Built AI Resume Builder with user-centered design principles, conducting user testing with 50+ participants
+• Created Sentiment Analysis Dashboard with emphasis on data visualization and user-friendly interactions
+• Applied design thinking methodology to identify user needs and create solutions that balance technical capability with usability
+• Integrated user feedback loops into development process, resulting in 25% improvement in user engagement
+
+EDUCATION & TRAINING
+
+Digital Tech Skills Accelerator AI Bootcamp
+Port Elizabeth/Gqeberha, South Africa | April 2025 - Present
+• Intensive full-time program focused on AI, machine learning, full-stack development, and ethical tech
+• Advanced training in Python, JavaScript, FastAPI, React, and AI tools (OpenAI, IBM Watson, Groq)
+• Specialized coursework in user experience design and human-computer interaction
+• Developed production-ready projects with emphasis on user-centered design principles
+• Gained expertise in cloud deployment, agile collaboration, and responsible AI design
+
+Higher Certificate in Software Development
+[Institution Name] | [Dates]
+• Focused on user interface design and software usability
+• Coursework in human-computer interaction and user experience principles
+
+PROJECTS
+
+SmartHarvest | UX/UI Design & Development
+• Designed and developed agricultural AI application with intuitive user interface
+• Conducted user research with 25+ farmers to understand workflow and pain points
+• Created wireframes and prototypes using Figma, resulting in 40% reduction in user onboarding time
+• Implemented responsive design ensuring seamless experience across devices
+
+AI Resume Builder | User Experience Design
+• Led user experience research and design for AI-powered resume optimization tool
+• Conducted usability testing with 50+ job seekers to refine user interface
+• Designed information architecture and user flows for complex AI interactions
+• Achieved 85% user satisfaction score through iterative design and testing
+
+Sentiment Analysis Dashboard | Data Visualization & UX
+• Created user-friendly dashboard for complex sentiment analysis data
+• Applied UI design principles to make technical data accessible to non-technical users
+• Implemented interactive prototypes using Adobe XD and InVision
+• Improved data interpretation speed by 50% through intuitive design
+
+CORE COMPETENCIES
+
+• User Research & Testing: Conducting user interviews, surveys, and usability testing
+• Information Architecture: Organizing and structuring content for optimal user experience
+• Interaction Design: Creating intuitive and engaging user interactions
+• Responsive Design: Ensuring seamless experience across all devices and platforms
+• Accessibility: Implementing WCAG guidelines and inclusive design practices
+• Agile Methodology: Collaborating in cross-functional teams using design sprints
+• Problem Solving: Combining technical skills with user-centered design thinking
+
+ACHIEVEMENTS
+
+• Improved User Experience: Reduced IT support resolution time by 40% through UX-focused solutions
+• User Satisfaction: Achieved 85% user satisfaction score on AI Resume Builder project
+• Mobile Usability: Improved internal dashboard mobile usability by 60% through responsive design
+• User Engagement: Increased user engagement by 25% through iterative design and user feedback integration
+• Data Accessibility: Improved data interpretation speed by 50% through intuitive dashboard design 

@@ -1,0 +1,106 @@
+# ==========================================
+# AUTHENTICATION & SECURITY
+# ==========================================
+pyotp==2.9.0
+qrcode[pil]==7.4.2
+cryptography==42.0.5
+bcrypt==4.1.2
+passlib==1.7.4
+python-multipart==0.0.9
+
+# ==========================================
+# SOCIAL LOGIN & OAUTH
+# ==========================================
+authlib==1.3.0
+httpx==0.28.0
+
+# ==========================================
+# EMAIL & NOTIFICATIONS
+# ==========================================
+fastapi-mail==1.4.1
+jinja2==3.1.5
+
+# ==========================================
+# CORE STREAMLIT APPLICATION
+# ==========================================
+streamlit==1.45.1
+streamlit-option-menu==0.3.6
+streamlit-extras==0.6.0
+
+# ==========================================
+# ENVIRONMENT & CONFIGURATION
+# ==========================================
+python-dotenv==1.0.1
+
+# ==========================================
+# DATA PROCESSING & ANALYSIS
+# ==========================================
+pandas==2.2.2
+numpy==1.26.4
+openpyxl==3.1.2
+
+# ==========================================
+# JOB SCRAPING & WEB AUTOMATION
+# ==========================================
+python-jobspy==1.1.80
+requests==2.32.3
+beautifulsoup4==4.12.3
+selenium==4.21.0
+playwright==1.44.0
+
+# ==========================================
+# AI & MACHINE LEARNING
+# ==========================================
+groq==0.28.0
+scikit-learn==1.4.2
+transformers==4.41.2
+sentence-transformers==2.6.1
+torch==2.3.0
+
+# ==========================================
+# DOCUMENT PROCESSING (RESUME PARSING)
+# ==========================================
+PyMuPDF==1.24.2
+python-docx==1.2.0
+PyPDF2==3.0.1
+
+# ==========================================
+# DATA VISUALIZATION
+# ==========================================
+plotly==5.22.0
+matplotlib==3.9.0
+seaborn==0.13.2
+
+# ==========================================
+# NATURAL LANGUAGE PROCESSING
+# ==========================================
+nltk==3.8.1
+
+# ==========================================
+# DATABASE & ORM
+# ==========================================
+sqlalchemy==2.0.41
+alembic==1.13.1
+psycopg2-binary==2.9.9
+sqlitecloud==0.0.84
+
+# ==========================================
+# UTILITIES & HELPERS
+# ==========================================
+pillow==10.3.0
+pydantic==2.6.4
+validators==0.22.0
+pytz==2024.1
+python-dateutil==2.9.0.post0
+psutil==5.9.8
+
+# ==========================================
+# DEVELOPMENT & TESTING
+# ==========================================
+pytest==8.2.2
+pytest-cov==5.0.0
+pytest-mock==3.12.0
+pytest-xdist==3.5.0
+pytest-html==4.0.2
+pytest-timeout==2.3.1
+coverage==7.5.3 
